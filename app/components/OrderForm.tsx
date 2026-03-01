@@ -78,8 +78,9 @@ export default function OrderForm({
     const total = unitPrice * qty;
     const priceStr = `${currencyCode} ${amount}`;
     const totalStr = `${currencyCode} ${total.toFixed(2)}`;
-    const previewImages = await getPreviewImages?.().catch(() => ({}));
-    if (!previewImages?.front && !previewImages?.side) {
+    const previewImages: { front?: string; side?: string } =
+      (await getPreviewImages?.().catch(() => ({}))) ?? {};
+    if (!previewImages.front && !previewImages.side) {
       setStatus("error");
       setMessage("Please upload at least one design image (front or side)");
       return;

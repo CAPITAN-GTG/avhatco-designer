@@ -45,13 +45,16 @@ function ProductItem({
 
 export default function OrderForm({
   products,
+  productId,
+  setProductId,
   getPreviewImages,
 }: {
   products: ShopifyProduct[];
+  productId: string;
+  setProductId: (id: string) => void;
   getPreviewImages?: () => Promise<{ front?: string; side?: string }>;
 }) {
   const [email, setEmail] = useState("");
-  const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "ok" | "error">("idle");

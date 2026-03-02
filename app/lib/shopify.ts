@@ -20,6 +20,8 @@ export type ShopifyProduct = {
     maxVariantPrice: { amount: string; currencyCode: string };
   };
   featuredImage?: { url: string; altText: string | null };
+  /** First image = front, second = side (for designer preview) */
+  images?: { url: string; altText: string | null }[];
 };
 
 export type ShopifyCollection = {
@@ -50,6 +52,14 @@ const PRODUCTS_QUERY = `
             maxVariantPrice { amount currencyCode }
           }
           featuredImage { url altText }
+          images(first: 2) {
+            edges {
+              node {
+                url
+                altText
+              }
+            }
+          }
         }
       }
     }
@@ -75,17 +85,36 @@ const COLLECTIONS_QUERY = `
   }
 `;
 
+type StorefrontProductNode = Omit<ShopifyProduct, "images"> & {
+  images?: {
+    edges: Array<{ node: { url: string; altText: string | null } }>;
+  };
+};
+
 type ProductsResponse = {
   data?: {
     products: {
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
       edges: Array<{
-        node: ShopifyProduct;
+        node: StorefrontProductNode;
       }>;
     };
   };
   errors?: Array<{ message: string }>;
 };
+
+function mapStorefrontProductNode(node: StorefrontProductNode): ShopifyProduct {
+  const images = node.images?.edges?.slice(0, 2).map((e) => ({
+    url: e.node.url,
+    altText: e.node.altText ?? null,
+  }));
+  const firstImage = images?.[0];
+  return {
+    ...node,
+    featuredImage: node.featuredImage ?? (firstImage ? { ...firstImage } : undefined),
+    images: images?.length ? images : undefined,
+  };
+}
 
 type CollectionsResponse = {
   data?: {
@@ -301,6 +330,10 @@ function mapAdminProductToProduct(node: AdminProductNode): ShopifyProduct {
   const max = nums.length ? Math.max(...nums).toFixed(2) : "0.00";
   const img = node.featuredImage ?? node.images?.edges?.[0]?.node;
   const featuredImage = img ? { url: img.url, altText: img.altText ?? null } : undefined;
+  const images = node.images?.edges?.slice(0, 2).map((e) => ({
+    url: e.node.url,
+    altText: e.node.altText ?? null,
+  }));
   return {
     id: node.id,
     title: node.title,
@@ -314,6 +347,7 @@ function mapAdminProductToProduct(node: AdminProductNode): ShopifyProduct {
       maxVariantPrice: { amount: max, currencyCode: "USD" },
     },
     featuredImage,
+    images: images?.length ? images : undefined,
   };
 }
 
@@ -436,7 +470,7 @@ export async function fetchAllShopifyProducts(): Promise<ShopifyProduct[]> {
     }
 
     for (const edge of products.edges) {
-      allProducts.push(edge.node);
+      allProducts.push(mapStorefrontProductNode(edge.node));
     }
 
     after = products.pageInfo.hasNextPage ? products.pageInfo.endCursor : null;

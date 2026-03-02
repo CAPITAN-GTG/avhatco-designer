@@ -4,10 +4,12 @@ import { useState, useCallback, forwardRef, useImperativeHandle, useRef } from "
 
 type Slot = "front" | "side";
 
-const BASE_IMAGES: Record<Slot, string> = {
+const FALLBACK_BASE_IMAGES: Record<Slot, string> = {
   front: "/front.webp",
   side: "/side.webp",
 };
+
+export type BaseImages = { front: string; side: string } | null;
 
 const EXPORT_WIDTH = 400;
 const EXPORT_HEIGHT = 300;
@@ -168,116 +170,131 @@ function Slot({
   );
 }
 
-const ImageOverlaySection = forwardRef<ImageOverlaySectionHandle, object>(
-  function ImageOverlaySection(_, ref) {
-    const [overlayFront, setOverlayFront] = useState<string | null>(null);
-    const [overlaySide, setOverlaySide] = useState<string | null>(null);
+const ImageOverlaySection = forwardRef<
+  ImageOverlaySectionHandle,
+  { baseImages?: BaseImages }
+>(function ImageOverlaySection({ baseImages = null }, ref) {
+  const [overlayFront, setOverlayFront] = useState<string | null>(null);
+  const [overlaySide, setOverlaySide] = useState<string | null>(null);
 
-    const setOverlay = useCallback((slot: Slot, file: File | null) => {
-      const setter = slot === "front" ? setOverlayFront : setOverlaySide;
-      setter((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return file ? URL.createObjectURL(file) : null;
-      });
-    }, []);
+  const baseSrcs: Record<Slot, string> = {
+    front: baseImages?.front ?? FALLBACK_BASE_IMAGES.front,
+    side: baseImages?.side ?? FALLBACK_BASE_IMAGES.side,
+  };
 
-    const handleFile = useCallback(
-      (slot: Slot) => (file: File) => setOverlay(slot, file),
-      [setOverlay]
-    );
+  const setOverlay = useCallback((slot: Slot, file: File | null) => {
+    const setter = slot === "front" ? setOverlayFront : setOverlaySide;
+    setter((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : null;
+    });
+  }, []);
 
-    const clearOverlay = useCallback(
-      (slot: Slot) => () => setOverlay(slot, null),
-      [setOverlay]
-    );
+  const handleFile = useCallback(
+    (slot: Slot) => (file: File) => setOverlay(slot, file),
+    [setOverlay]
+  );
 
-    const getCompositedImages = useCallback(async () => {
-      const result: { front?: string; side?: string } = {};
-      const paddingY = 64;
-      const paddingFrontX = 64;
-      const paddingSideLeft = 110;
-      const paddingSideRight = 50;
-      const overlayMaxW = Math.floor(EXPORT_WIDTH * 0.25);
-      const overlayMaxH = Math.floor(EXPORT_HEIGHT * 0.25);
-      const contentH = EXPORT_HEIGHT - paddingY * 2;
+  const clearOverlay = useCallback(
+    (slot: Slot) => () => setOverlay(slot, null),
+    [setOverlay]
+  );
 
-      if (overlayFront) {
-        try {
-          const [baseImg, overlayImg] = await Promise.all([
-            loadImage(BASE_IMAGES.front),
-            loadImage(overlayFront),
-          ]);
-          const canvas = document.createElement("canvas");
-          canvas.width = EXPORT_WIDTH;
-          canvas.height = EXPORT_HEIGHT;
-          const ctx = canvas.getContext("2d")!;
-          ctx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
-          const contentW = EXPORT_WIDTH - paddingFrontX * 2;
-          const ox = paddingFrontX + (contentW - overlayMaxW) / 2;
-          const oy = paddingY + (contentH - overlayMaxH) / 2;
-          drawOverlayContain(ctx, overlayImg, ox, oy, overlayMaxW, overlayMaxH);
-          result.front = canvas.toDataURL("image/png");
-        } catch {
-          // skip if composition fails
-        }
+  const getCompositedImages = useCallback(async () => {
+    const result: { front?: string; side?: string } = {};
+    const paddingY = 64;
+    const paddingFrontX = 64;
+    const paddingSideLeft = 110;
+    const paddingSideRight = 50;
+    const overlayMaxW = Math.floor(EXPORT_WIDTH * 0.25);
+    const overlayMaxH = Math.floor(EXPORT_HEIGHT * 0.25);
+    const contentH = EXPORT_HEIGHT - paddingY * 2;
+    const frontBase = baseSrcs.front;
+    const sideBase = baseSrcs.side;
+
+    if (overlayFront) {
+      try {
+        const [baseImg, overlayImg] = await Promise.all([
+          loadImage(frontBase),
+          loadImage(overlayFront),
+        ]);
+        const canvas = document.createElement("canvas");
+        canvas.width = EXPORT_WIDTH;
+        canvas.height = EXPORT_HEIGHT;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
+        const contentW = EXPORT_WIDTH - paddingFrontX * 2;
+        const ox = paddingFrontX + (contentW - overlayMaxW) / 2;
+        const oy = paddingY + (contentH - overlayMaxH) / 2;
+        drawOverlayContain(ctx, overlayImg, ox, oy, overlayMaxW, overlayMaxH);
+        result.front = canvas.toDataURL("image/png");
+      } catch {
+        // skip if composition fails (e.g. CORS on external image)
       }
+    }
 
-      if (overlaySide) {
-        try {
-          const [baseImg, overlayImg] = await Promise.all([
-            loadImage(BASE_IMAGES.side),
-            loadImage(overlaySide),
-          ]);
-          const canvas = document.createElement("canvas");
-          canvas.width = EXPORT_WIDTH;
-          canvas.height = EXPORT_HEIGHT;
-          const ctx = canvas.getContext("2d")!;
-          ctx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
-          const contentW = EXPORT_WIDTH - paddingSideLeft - paddingSideRight;
-          const ox = paddingSideLeft + (contentW - overlayMaxW) / 2;
-          const oy = paddingY + (contentH - overlayMaxH) / 2;
-          drawOverlayContain(ctx, overlayImg, ox, oy, overlayMaxW, overlayMaxH);
-          result.side = canvas.toDataURL("image/png");
-        } catch {
-          // skip if composition fails
-        }
+    if (overlaySide) {
+      try {
+        const [baseImg, overlayImg] = await Promise.all([
+          loadImage(sideBase),
+          loadImage(overlaySide),
+        ]);
+        const canvas = document.createElement("canvas");
+        canvas.width = EXPORT_WIDTH;
+        canvas.height = EXPORT_HEIGHT;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(baseImg, 0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
+        const contentW = EXPORT_WIDTH - paddingSideLeft - paddingSideRight;
+        const ox = paddingSideLeft + (contentW - overlayMaxW) / 2;
+        const oy = paddingY + (contentH - overlayMaxH) / 2;
+        drawOverlayContain(ctx, overlayImg, ox, oy, overlayMaxW, overlayMaxH);
+        result.side = canvas.toDataURL("image/png");
+      } catch {
+        // skip if composition fails
       }
+    }
 
-      return result;
-    }, [overlayFront, overlaySide]);
+    return result;
+  }, [
+    overlayFront,
+    overlaySide,
+    baseImages?.front ?? FALLBACK_BASE_IMAGES.front,
+    baseImages?.side ?? FALLBACK_BASE_IMAGES.side,
+  ]);
 
-    useImperativeHandle(ref, () => ({ getCompositedImages }), [getCompositedImages]);
+  useImperativeHandle(ref, () => ({ getCompositedImages }), [getCompositedImages]);
 
-    return (
-      <div className="min-w-0 max-w-[560px]">
-        <div className="flex items-end justify-between gap-3 mb-4">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-[#444]">Design preview</h2>
-            <p className="text-xs text-[#666] mt-1">
-              Drop an image on each view to preview placement.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-          <Slot
-            slot="front"
-            baseSrc={BASE_IMAGES.front}
-            overlayUrl={overlayFront}
-            onClear={clearOverlay("front")}
-            onFile={handleFile("front")}
-          />
-          <Slot
-            slot="side"
-            baseSrc={BASE_IMAGES.side}
-            overlayUrl={overlaySide}
-            onClear={clearOverlay("side")}
-            onFile={handleFile("side")}
-          />
+  return (
+    <div className="min-w-0 max-w-[560px]">
+      <div className="flex items-end justify-between gap-3 mb-4">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-[#444]">Design preview</h2>
+          <p className="text-xs text-[#666] mt-1">
+            {baseImages
+              ? "Preview uses the selected product. Drop an image on each view to preview placement."
+              : "Select a product, then drop an image on each view to preview placement."}
+          </p>
         </div>
       </div>
-    );
-  }
-);
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+        <Slot
+          slot="front"
+          baseSrc={baseSrcs.front}
+          overlayUrl={overlayFront}
+          onClear={clearOverlay("front")}
+          onFile={handleFile("front")}
+        />
+        <Slot
+          slot="side"
+          baseSrc={baseSrcs.side}
+          overlayUrl={overlaySide}
+          onClear={clearOverlay("side")}
+          onFile={handleFile("side")}
+        />
+      </div>
+    </div>
+  );
+});
 
 export default ImageOverlaySection;

@@ -24,7 +24,7 @@ function ProductItem({
       : "");
   return (
     <DropdownMenuItem onSelect={onSelect} textValue={product.title}>
-      <span className="flex w-8 h-8 shrink-0 items-center justify-center rounded overflow-hidden bg-[#f0f0f0]">
+      <span className="flex w-9 h-9 shrink-0 items-center justify-center rounded-md overflow-hidden bg-[#f3f4f6] border border-[#e5e7eb]">
         {product.featuredImage?.url ? (
           <img
             src={product.featuredImage.url}
@@ -36,8 +36,8 @@ function ProductItem({
         )}
       </span>
       <span className="flex flex-col min-w-0">
-        <span className="truncate font-medium">{product.title}</span>
-        <span className="text-xs text-[#555]">{price}</span>
+        <span className="truncate font-medium text-[#111827]">{product.title}</span>
+        <span className="text-xs text-[#6b7280]">{price}</span>
       </span>
     </DropdownMenuItem>
   );
@@ -120,44 +120,44 @@ export default function OrderForm({
     : null;
 
   return (
-    <div className="w-full lg:sticky lg:top-6">
-      <h2 className="text-sm font-semibold text-[#444]">Order / Request</h2>
-      <p className="text-xs text-[#666] mt-1 mb-4">
+    <div className="w-full xl:sticky xl:top-8">
+      <h2 className="text-base sm:text-lg font-semibold tracking-tight text-[#111827]">Order details</h2>
+      <p className="text-xs sm:text-sm text-[#4b5563] mt-1 mb-5">
         Pick a product and send your request to the business inbox.
       </p>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3 w-full">
-        <label className="text-sm text-[#555]">
-          <span className="block mb-1">Your email (required)</span>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full">
+        <label className="text-sm text-[#374151]">
+          <span className="block mb-1.5 font-medium">Your email</span>
           <input
             type="email"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            className="w-full text-sm px-2 py-1.5 rounded border border-[#ddd] bg-[#fafafa] text-[#1a1a1a]"
+            className="w-full text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#d1d5db] focus:border-[#9ca3af]"
           />
         </label>
-        <label className="text-sm text-[#555]">
-          <span className="block mb-1">Quantity</span>
+        <label className="text-sm text-[#374151]">
+          <span className="block mb-1.5 font-medium">Quantity</span>
           <input
             type="number"
             min={1}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value ? Math.max(1, parseInt(e.target.value, 10) || 1) : 1)}
-            className="w-full text-sm px-2 py-1.5 rounded border border-[#ddd] bg-[#fafafa] text-[#1a1a1a]"
+            className="w-full text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#d1d5db] focus:border-[#9ca3af]"
           />
         </label>
-        <label className="text-sm text-[#555]">
-          <span className="block mb-1">Select product</span>
+        <label className="text-sm text-[#374151]">
+          <span className="block mb-1.5 font-medium">Select product</span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="w-full text-left text-sm px-2 py-1.5 rounded border border-[#ddd] bg-[#fafafa] text-[#1a1a1a] flex items-center gap-2 min-h-[2.25rem] hover:bg-[#f0f0f0]"
+                className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] flex items-center gap-2.5 min-h-10 hover:bg-[#f9fafb]"
               >
                 {selectedProduct ? (
                   <>
-                    <span className="flex w-8 h-8 shrink-0 rounded overflow-hidden bg-[#eee]">
+                    <span className="flex w-9 h-9 shrink-0 rounded-md overflow-hidden bg-[#f3f4f6] border border-[#e5e7eb]">
                       {selectedProduct.featuredImage?.url ? (
                         <img
                           src={selectedProduct.featuredImage.url}
@@ -169,7 +169,7 @@ export default function OrderForm({
                       )}
                     </span>
                     <span className="truncate">
-                      {selectedProduct.title} — {selectedProduct.priceRange.minVariantPrice.currencyCode}{" "}
+                      {selectedProduct.title} · {selectedProduct.priceRange.minVariantPrice.currencyCode}{" "}
                       {selectedProduct.priceRange.minVariantPrice.amount}
                     </span>
                   </>
@@ -178,7 +178,7 @@ export default function OrderForm({
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-[16rem]">
+            <DropdownMenuContent align="start" className="min-w-[16rem] sm:min-w-[18rem]">
               {products.map((p) => (
                 <ProductItem
                   key={p.id}
@@ -190,30 +190,39 @@ export default function OrderForm({
           </DropdownMenu>
         </label>
         {calculatedTotal != null && (
-          <p className="text-sm text-[#444] font-medium">
-            Total: {calculatedTotal}
-          </p>
+          <div className="rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5">
+            <p className="text-xs font-medium uppercase tracking-[0.08em] text-[#6b7280]">Estimated total</p>
+            <p className="text-base font-semibold text-[#111827] mt-0.5">{calculatedTotal}</p>
+          </div>
         )}
-        <label className="text-sm text-[#555]">
-          <span className="block mb-1">Note (optional)</span>
+        <label className="text-sm text-[#374151]">
+          <span className="block mb-1.5 font-medium">Note (optional)</span>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Any special instructions..."
             rows={3}
-            className="w-full text-sm px-2 py-1.5 rounded border border-[#ddd] bg-[#fafafa] text-[#1a1a1a] resize-y"
+            className="w-full text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] resize-y placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#d1d5db] focus:border-[#9ca3af]"
           />
         </label>
         <button
           type="submit"
           disabled={status === "sending"}
-          className="text-sm px-3 py-2 rounded bg-[#1a1a1a] text-white hover:bg-[#333] disabled:opacity-50 w-full"
+          className="text-sm font-medium px-4 py-2.5 rounded-lg bg-[#111827] text-white hover:bg-[#1f2937] disabled:opacity-50 w-full"
         >
           {status === "sending" ? "Sending…" : "Submit"}
         </button>
       </form>
-      {status === "ok" && <p className="text-sm text-emerald-600 mt-2">{message}</p>}
-      {status === "error" && <p className="text-sm text-red-600 mt-2">{message}</p>}
+      {status === "ok" && (
+        <p className="text-sm text-emerald-700 mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+          {message}
+        </p>
+      )}
+      {status === "error" && (
+        <p className="text-sm text-red-700 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+          {message}
+        </p>
+      )}
     </div>
   );
 }

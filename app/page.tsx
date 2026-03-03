@@ -13,31 +13,40 @@ export default async function Home() {
 
   if (error) {
     return (
-      <main className="min-h-screen bg-[#f5f5f5] text-[#1a1a1a] w-full px-4 sm:px-6 py-6">
-        <h1 className="text-xl font-semibold mb-4">Shopify products</h1>
-        <p className="text-red-600 mb-2">{error}</p>
-        <p className="text-sm text-[#555]">
-          Admin API: set SHOPIFY_STORE plus either (a) SHOPIFY_ADMIN_ACCESS_TOKEN, or
-          (b) CLIENT_ID and CLIENT_SECRET (or SECRET_KEY) from Dev Dashboard → your app → Settings.
-        </p>
+      <main className="min-h-screen bg-[#f3f4f6] text-[#111827] w-full">
+        <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+          <div className="rounded-2xl border border-[#e5e7eb] bg-white p-6 sm:p-8">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight mb-4">Shopify products</h1>
+            <p className="text-sm text-red-600 mb-3">{error}</p>
+            <p className="text-sm text-[#4b5563]">
+              Admin API: set SHOPIFY_STORE plus either (a) SHOPIFY_ADMIN_ACCESS_TOKEN, or
+              (b) CLIENT_ID and CLIENT_SECRET (or SECRET_KEY) from Dev Dashboard → your app → Settings.
+            </p>
+          </div>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#f5f5f5] text-[#1a1a1a] w-full">
-      <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 py-6">
-        <div className="mb-5 sm:mb-6">
-          <h1 className="text-xl font-semibold">Custom designer</h1>
-          <p className="text-sm text-[#555] mt-1">
+    <main className="min-h-screen bg-[#f3f4f6] text-[#111827] w-full">
+      <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+        <header className="mb-6 sm:mb-8">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#6b7280]">
+            Avhatco Designer
+          </p>
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight mt-1">
+            Custom hat request
+          </h1>
+          <p className="text-sm sm:text-base text-[#4b5563] mt-2 max-w-2xl">
             Upload your artwork, preview it on the product, then submit your request.
           </p>
-        </div>
+        </header>
 
         {products.length === 0 && (
-          <p className="text-sm text-[#555] mb-4 sm:mb-6">
-            No products. Store may be empty or token may lack scope.
-          </p>
+          <div className="mb-6 rounded-xl border border-[#e5e7eb] bg-white px-4 py-3 text-sm text-[#4b5563]">
+            No products found. The store may be empty or token may lack scope.
+          </div>
         )}
 
         <DesignerCard products={products} />

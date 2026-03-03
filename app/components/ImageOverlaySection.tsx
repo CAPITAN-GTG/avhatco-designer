@@ -96,8 +96,10 @@ function DropZone({
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       className={
-        "mt-2 block border-2 border-dashed rounded-md p-4 text-center text-sm cursor-pointer transition-colors " +
-        (drag ? "border-[#1a1a1a] bg-[#eee]" : "border-[#ccc] bg-white hover:border-[#999]")
+        "mt-3 block border rounded-lg px-3 py-2.5 text-center text-xs sm:text-sm cursor-pointer transition-colors " +
+        (drag
+          ? "border-[#111827] bg-[#f3f4f6] text-[#111827]"
+          : "border-[#d1d5db] bg-white text-[#4b5563] hover:border-[#9ca3af] hover:bg-[#f9fafb]")
       }
     >
       <input
@@ -128,12 +130,15 @@ function Slot({
 
   return (
     <div className="flex flex-col min-w-0">
-      <div className="relative w-full aspect-[4/3] max-h-[240px] sm:max-h-[280px] bg-[#eee] rounded-md overflow-hidden">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-widest text-[#6b7280]">{label} view</p>
+      </div>
+      <div className="relative w-full aspect-4/3 max-h-[240px] sm:max-h-[280px] bg-[#f3f4f6] rounded-xl border border-[#e5e7eb] overflow-hidden">
         {/* Base image - fills container, overlay sits exactly on top */}
         <img
           src={baseSrc}
           alt={label}
-          className="absolute inset-0 w-full h-full object-contain"
+          className="absolute inset-0 w-full h-full object-contain p-2 sm:p-3"
         />
         {/* Overlay - smaller and padded to sit "on the hat"; side has more left padding to shift right */}
         {overlayUrl && (
@@ -155,7 +160,7 @@ function Slot({
             <button
               type="button"
               onClick={onClear}
-              className="absolute top-1 right-1 text-xs px-2 py-1 rounded bg-black/70 text-white hover:bg-black"
+              className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border border-[#d1d5db] bg-white text-[#374151] hover:bg-[#f9fafb]"
             >
               Clear
             </button>
@@ -265,11 +270,11 @@ const ImageOverlaySection = forwardRef<
   useImperativeHandle(ref, () => ({ getCompositedImages }), [getCompositedImages]);
 
   return (
-    <div className="min-w-0 max-w-[560px]">
-      <div className="flex items-end justify-between gap-3 mb-4">
+    <div className="min-w-0 max-w-[640px]">
+      <div className="flex items-end justify-between gap-3 mb-5">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-[#444]">Design preview</h2>
-          <p className="text-xs text-[#666] mt-1">
+          <h2 className="text-base sm:text-lg font-semibold tracking-tight text-[#111827]">Design preview</h2>
+          <p className="text-xs sm:text-sm text-[#4b5563] mt-1">
             {baseImages
               ? "Preview uses the selected product. Drop an image on each view to preview placement."
               : "Select a product, then drop an image on each view to preview placement."}
@@ -277,7 +282,7 @@ const ImageOverlaySection = forwardRef<
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
         <Slot
           slot="front"
           baseSrc={baseSrcs.front}

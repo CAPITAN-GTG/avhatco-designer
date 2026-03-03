@@ -135,7 +135,7 @@ export default function DesignerCard({
   if (!ready) {
     return (
       <div className="rounded-2xl bg-white border border-[#e5e7eb] overflow-hidden p-5 sm:p-7">
-        <h2 className="text-base font-semibold tracking-tight text-[#111827]">Loading product images</h2>
+        <h2 className="text-base font-medium tracking-tight text-[#111827]">Loading product images</h2>
         <p className="text-sm text-[#4b5563] mt-1">
           Preparing the designer for faster interactions.
         </p>

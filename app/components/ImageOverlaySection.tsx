@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, forwardRef, useImperativeHandle, useRef } from "react";
+import { Sparkles, Upload, X } from "lucide-react";
 
 type Slot = "front" | "side";
 
@@ -108,7 +109,10 @@ function DropZone({
         onChange={onInputChange}
         className="sr-only"
       />
-      {label}
+      <span className="inline-flex items-center justify-center gap-1.5 text-[11px] sm:text-xs text-[#374151]">
+        <Upload className="w-3.5 h-3.5 text-[#6b7280]" aria-hidden="true" />
+        {label}
+      </span>
     </label>
   );
 }
@@ -131,9 +135,11 @@ function Slot({
   return (
     <div className="flex flex-col min-w-0">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs font-medium uppercase tracking-widest text-[#6b7280]">{label} view</p>
+        <p className="text-[11px] sm:text-xs font-medium uppercase tracking-[0.18em] text-[#6b7280]">
+          {label} view
+        </p>
       </div>
-      <div className="relative w-full aspect-4/3 max-h-[240px] sm:max-h-[280px] bg-[#f3f4f6] rounded-xl border border-[#e5e7eb] overflow-hidden">
+      <div className="relative w-full aspect-4/3 max-h-[240px] sm:max-h-[280px] bg-white rounded-xl border border-[#e5e7eb] overflow-hidden">
         {/* Base image - fills container, overlay sits exactly on top */}
         <img
           src={baseSrc}
@@ -160,8 +166,9 @@ function Slot({
             <button
               type="button"
               onClick={onClear}
-              className="absolute top-2 right-2 text-xs px-2 py-1 rounded-md border border-[#d1d5db] bg-white text-[#374151] hover:bg-[#f9fafb]"
+              className="absolute top-2 right-2 inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-md border border-[#d1d5db] bg-white/95 text-[#374151] shadow-sm backdrop-blur-sm hover:bg-[#f9fafb]"
             >
+              <X className="w-3 h-3" aria-hidden="true" />
               Clear
             </button>
           </>
@@ -273,7 +280,15 @@ const ImageOverlaySection = forwardRef<
     <div className="min-w-0 max-w-[640px]">
       <div className="flex items-end justify-between gap-3 mb-5">
         <div className="min-w-0">
-          <h2 className="text-base sm:text-lg font-semibold tracking-tight text-[#111827]">Design preview</h2>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#e5e7eb] bg-white/80 px-3 py-1 shadow-sm backdrop-blur-sm">
+            <Sparkles className="w-3.5 h-3.5 text-[#4b5563]" aria-hidden="true" />
+            <span className="text-[11px] uppercase tracking-[0.18em] text-[#6b7280]">
+              Live preview
+            </span>
+          </div>
+          <h2 className="mt-3 text-base sm:text-lg font-medium tracking-tight text-[#111827]">
+            Design preview
+          </h2>
           <p className="text-xs sm:text-sm text-[#4b5563] mt-1">
             {baseImages
               ? "Preview uses the selected product. Drop an image on each view to preview placement."

@@ -183,8 +183,8 @@ async function getAdminAccessToken(): Promise<string> {
 }
 
 const ADMIN_PRODUCTS_QUERY = `
-  query GetProducts($first: Int!, $after: String) {
-    products(first: $first, after: $after) {
+  query GetProducts($first: Int!, $after: String, $query: String) {
+    products(first: $first, after: $after, query: $query) {
       pageInfo { hasNextPage endCursor }
       edges {
         node {
@@ -366,7 +366,7 @@ async function fetchAllProductsAdmin(): Promise<ShopifyProduct[]> {
   do {
     const json: AdminProductsResponse = await adminFetch<AdminProductsResponse>(
       ADMIN_PRODUCTS_QUERY,
-      { first: 50, after }
+      { first: 50, after, query: "status:ACTIVE" }
     );
     const products = json.data?.products;
     if (!products) throw new Error("Admin API: unexpected products response.");
@@ -470,7 +470,10 @@ export async function fetchAllShopifyProducts(): Promise<ShopifyProduct[]> {
     }
 
     for (const edge of products.edges) {
-      allProducts.push(mapStorefrontProductNode(edge.node));
+      const node = edge.node;
+      if (node.availableForSale) {
+        allProducts.push(mapStorefrontProductNode(node));
+      }
     }
 
     after = products.pageInfo.hasNextPage ? products.pageInfo.endCursor : null;

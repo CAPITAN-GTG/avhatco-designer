@@ -69,13 +69,13 @@ export async function sendOrderEmails(
 
     const priceText =
       input.productPrice && input.totalPrice
-        ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nTotal: ${input.totalPrice}\n`
+        ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35\nTotal: ${input.totalPrice}\n`
         : input.productPrice
-          ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\n`
+          ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35\n`
           : "";
     const priceHtml =
       input.productPrice
-        ? `<section style="margin:1em 0"><strong>Unit price:</strong> ${input.productPrice}<br/><strong>Quantity:</strong> ${qty}${input.totalPrice ? `<br/><strong>Total:</strong> ${input.totalPrice}` : ""}</section>`
+        ? `<section style="margin:1em 0"><strong>Unit price:</strong> ${input.productPrice}<br/><strong>Quantity:</strong> ${qty}<br/><strong>Setup fee:</strong> $35${input.totalPrice ? `<br/><strong>Total:</strong> ${input.totalPrice}` : ""}</section>`
         : "";
 
     const noteText = input.note?.trim() ? `Note: ${input.note.trim()}\n` : "";

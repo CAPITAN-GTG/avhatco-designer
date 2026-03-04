@@ -13,6 +13,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 type DecorationType = "embroidery" | "leather";
 
+const SETUP_FEE = 35;
+
+const PATCH_SHAPES: { value: string; label: string; image: string }[] = [
+  { value: "circle", label: "Circle", image: "/circle.png" },
+  { value: "rectangle", label: "Rectangle", image: "/rectangle.png" },
+  { value: "hexagon short", label: "Hexagon short", image: "/hexagon-short.png" },
+  { value: "hexagon long", label: "Hexagon long", image: "/hexagon-long.png" },
+  { value: "die cut", label: "Die cut", image: "/die-cut.png" },
+];
+
 function ProductItem({
   product,
   onSelect,
@@ -85,7 +95,8 @@ export default function OrderForm({
     setMessage("");
     const { amount, currencyCode } = product.priceRange.minVariantPrice;
     const unitPrice = parseFloat(amount);
-    const total = unitPrice * qty;
+    const subtotal = unitPrice * qty;
+    const total = subtotal + SETUP_FEE;
     const priceStr = `${currencyCode} ${amount}`;
     const totalStr = `${currencyCode} ${total.toFixed(2)}`;
     const previewImages: { front?: string; side?: string } =
@@ -130,7 +141,7 @@ export default function OrderForm({
     : 0;
   const qty = Math.max(1, Math.floor(quantity));
   const calculatedTotal = selectedProduct
-    ? `${selectedProduct.priceRange.minVariantPrice.currencyCode} ${(unitPrice * qty).toFixed(2)}`
+    ? `${selectedProduct.priceRange.minVariantPrice.currencyCode} ${(unitPrice * qty + SETUP_FEE).toFixed(2)}`
     : null;
 
   return (
@@ -228,37 +239,47 @@ export default function OrderForm({
                         className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] flex items-center gap-2.5 min-h-10 hover:bg-[#f9fafb]"
                       >
                         {leatherOutline ? (
-                          <>
-                            <span className="flex w-8 h-8 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb]">
-                              <span className="inline-block w-5 h-5 border border-dashed border-[#9ca3af] rounded-sm" />
-                            </span>
-                            <span className="truncate capitalize">{leatherOutline}</span>
-                          </>
+                          (() => {
+                            const shape = PATCH_SHAPES.find((s) => s.value === leatherOutline);
+                            return shape ? (
+                              <>
+                                <span className="flex w-8 h-8 shrink-0 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb] overflow-hidden">
+                                  <img
+                                    src={shape.image}
+                                    alt=""
+                                    className="h-5 w-5 object-contain"
+                                  />
+                                </span>
+                                <span className="truncate">{shape.label}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="flex w-8 h-8 shrink-0 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb]" />
+                                <span className="truncate capitalize">{leatherOutline}</span>
+                              </>
+                            );
+                          })()
                         ) : (
                           <span className="text-[#888]">Choose outline</span>
                         )}
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
-                      {["circle", "rectangle", "square", "trap", "custom outline"].map(
-                        (shape) => (
-                          <DropdownMenuItem
-                            key={shape}
-                            onSelect={() => setLeatherOutline(shape)}
-                          >
-                            <span className="flex w-8 h-8 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb]">
-                              {shape === "circle" ? (
-                                <span className="inline-block w-5 h-5 rounded-full border border-dashed border-[#9ca3af]" />
-                              ) : shape === "trap" ? (
-                                <span className="inline-block w-5 h-5 border border-dashed border-[#9ca3af] [clip-path:polygon(10%_0,100%_0,90%_100%,0_100%)]" />
-                              ) : (
-                                <span className="inline-block w-5 h-5 border border-dashed border-[#9ca3af] rounded-sm" />
-                              )}
-                            </span>
-                            <span className="capitalize">{shape}</span>
-                          </DropdownMenuItem>
-                        )
-                      )}
+                      {PATCH_SHAPES.map((shape) => (
+                        <DropdownMenuItem
+                          key={shape.value}
+                          onSelect={() => setLeatherOutline(shape.value)}
+                        >
+                          <span className="flex w-8 h-8 shrink-0 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb] overflow-hidden">
+                            <img
+                              src={shape.image}
+                              alt=""
+                              className="h-5 w-5 object-contain"
+                            />
+                          </span>
+                          <span>{shape.label}</span>
+                        </DropdownMenuItem>
+                      ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -404,6 +425,9 @@ export default function OrderForm({
               Estimated total
             </p>
             <p className="text-base text-[#111827] mt-0.5">{calculatedTotal}</p>
+            <p className="text-xs text-[#6b7280] mt-1">
+              Includes $35 setup fee.
+            </p>
           </div>
         )}
         <label className="text-sm text-[#374151]">

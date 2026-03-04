@@ -20,7 +20,7 @@ export type ShopifyProduct = {
     maxVariantPrice: { amount: string; currencyCode: string };
   };
   featuredImage?: { url: string; altText: string | null };
-  /** First image = front, second = side (for designer preview) */
+  /** Designer preview: 2nd image = front view, 3rd image = side view (API fetches first 3) */
   images?: { url: string; altText: string | null }[];
 };
 
@@ -52,7 +52,7 @@ const PRODUCTS_QUERY = `
             maxVariantPrice { amount currencyCode }
           }
           featuredImage { url altText }
-          images(first: 2) {
+          images(first: 3) {
             edges {
               node {
                 url
@@ -104,7 +104,7 @@ type ProductsResponse = {
 };
 
 function mapStorefrontProductNode(node: StorefrontProductNode): ShopifyProduct {
-  const images = node.images?.edges?.slice(0, 2).map((e) => ({
+  const images = node.images?.edges?.slice(0, 3).map((e) => ({
     url: e.node.url,
     altText: e.node.altText ?? null,
   }));
@@ -330,7 +330,7 @@ function mapAdminProductToProduct(node: AdminProductNode): ShopifyProduct {
   const max = nums.length ? Math.max(...nums).toFixed(2) : "0.00";
   const img = node.featuredImage ?? node.images?.edges?.[0]?.node;
   const featuredImage = img ? { url: img.url, altText: img.altText ?? null } : undefined;
-  const images = node.images?.edges?.slice(0, 2).map((e) => ({
+  const images = node.images?.edges?.slice(0, 3).map((e) => ({
     url: e.node.url,
     altText: e.node.altText ?? null,
   }));

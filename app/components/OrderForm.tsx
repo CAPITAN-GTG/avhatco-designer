@@ -63,9 +63,7 @@ export default function OrderForm({
   const [status, setStatus] = useState<"idle" | "sending" | "ok" | "error">("idle");
   const [message, setMessage] = useState("");
   const [decorationType, setDecorationType] = useState<DecorationType>("embroidery");
-  const [embroideryPreference, setEmbroideryPreference] = useState<"yes" | "no" | null>(
-    null
-  );
+  const [embroideryPreference, setEmbroideryPreference] = useState<"yes" | "no">("no");
   const [leatherOutline, setLeatherOutline] = useState<string | null>(null);
   const [leatherColor, setLeatherColor] = useState<string | null>(null);
 
@@ -184,7 +182,7 @@ export default function OrderForm({
                   setLeatherOutline(null);
                   setLeatherColor(null);
                 } else {
-                  setEmbroideryPreference(null);
+                  setEmbroideryPreference("no");
                 }
               }}
               className="w-full"
@@ -209,31 +207,15 @@ export default function OrderForm({
                 </TabsList>
               </div>
               <TabsContent value="embroidery" className="px-4 py-4">
-                <div className="space-y-2">
-                  <p className="text-xs text-[#4b5563]">Do you want embroidery?</p>
-                  <div className="flex flex-col gap-1" role="radiogroup" aria-label="Embroidery preference">
-                    <label className="flex items-center gap-2 text-xs sm:text-sm cursor-pointer">
-                      <input
-                        type="radio"
-                        name="embroideryPreference"
-                        className="h-3.5 w-3.5 border border-[#d1d5db] text-[#111827]"
-                        checked={embroideryPreference === "yes"}
-                        onChange={() => setEmbroideryPreference("yes")}
-                      />
-                      <span className="text-[#111827]">Yes</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-xs sm:text-sm cursor-pointer">
-                      <input
-                        type="radio"
-                        name="embroideryPreference"
-                        className="h-3.5 w-3.5 border border-[#d1d5db] text-[#111827]"
-                        checked={embroideryPreference === "no"}
-                        onChange={() => setEmbroideryPreference("no")}
-                      />
-                      <span className="text-[#111827]">No</span>
-                    </label>
-                  </div>
-                </div>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border border-[#d1d5db] text-[#111827]"
+                    checked={embroideryPreference === "yes"}
+                    onChange={(e) => setEmbroideryPreference(e.target.checked ? "yes" : "no")}
+                  />
+                  <span className="text-[#111827]">I want embroidery</span>
+                </label>
               </TabsContent>
               <TabsContent value="leather" className="px-4 py-4">
                 <div className="space-y-3">
@@ -426,10 +408,13 @@ export default function OrderForm({
         )}
         <label className="text-sm text-[#374151]">
           <span className="block mb-1.5 text-[#374151]">Note (optional)</span>
+          <p className="text-xs text-[#4b5563] mb-1.5">
+            Please be specific: include any details that help us fulfill your order—e.g. design placement, colors, thread or patch preferences, personalization text, and requested timeline or deadline.
+          </p>
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="Any special instructions..."
+            placeholder="e.g. Center the logo on the front, use navy thread, need by March 15…"
             rows={3}
             className="w-full text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] resize-y placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#d1d5db] focus:border-[#9ca3af]"
           />

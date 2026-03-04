@@ -10,10 +10,12 @@ import type { ShopifyProduct } from "../lib/shopify";
 const IMAGE_CACHE_KEY = "designer_image_cache_v1";
 const IMAGE_CACHE_DAYS = 7;
 
+/** Use product images 1–3: FRONT = 2nd image, SIDE = 3rd (fallback to 1st if no 3rd). */
 function productImages(product: ShopifyProduct | null): { front: string; side: string } | null {
   if (!product) return null;
-  const front = product.images?.[0]?.url ?? product.featuredImage?.url;
-  const side = product.images?.[1]?.url ?? product.images?.[0]?.url ?? product.featuredImage?.url;
+  const imgs = product.images ?? [];
+  const front = imgs[1]?.url ?? imgs[0]?.url ?? product.featuredImage?.url;
+  const side = imgs[2]?.url ?? imgs[0]?.url ?? product.featuredImage?.url;
   if (!front || !side) return null;
   return { front, side };
 }

@@ -14,6 +14,9 @@ export type BaseImages = { front: string; side: string } | null;
 
 const EXPORT_WIDTH = 400;
 const EXPORT_HEIGHT = 300;
+/** Max longest side for "design only" export (user's artwork for download). Keeps email payload small. */
+const DESIGN_ONLY_MAX_PX = 1200;
+const DESIGN_ONLY_JPEG_QUALITY = 0.85;
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -62,7 +65,14 @@ function drawOverlayContain(
 }
 
 export type ImageOverlaySectionHandle = {
-  getCompositedImages: () => Promise<{ front?: string; side?: string }>;
+  getCompositedImages: () => Promise<{
+    /** Composited preview (hat + design), small PNG */
+    front?: string;
+    side?: string;
+    /** User's design/artwork only (for download), JPEG to keep size down */
+    frontDesignOnly?: string;
+    sideDesignOnly?: string;
+  }>;
 };
 
 function DropZone({
@@ -470,13 +480,41 @@ const ImageOverlaySection = forwardRef<
     [setOverlay]
   );
 
+  /** Export user's overlay image only (design/artwork), resized to keep payload small. */
+  const exportDesignOnly = useCallback(async (objectUrl: string): Promise<string | undefined> => {
+    try {
+      const img = await loadImage(objectUrl);
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      if (!iw || !ih) return undefined;
+      const scale = Math.min(1, DESIGN_ONLY_MAX_PX / Math.max(iw, ih));
+      const w = Math.round(iw * scale);
+      const h = Math.round(ih * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      return canvas.toDataURL("image/jpeg", DESIGN_ONLY_JPEG_QUALITY);
+    } catch {
+      return undefined;
+    }
+  }, []);
+
   const getCompositedImages = useCallback(async () => {
-    const result: { front?: string; side?: string } = {};
-    // Match UI: base image drawn with contain (fit, centered); content = inset within base rect; overlay = 45% of content * scale
+    const result: {
+      front?: string;
+      side?: string;
+      frontDesignOnly?: string;
+      sideDesignOnly?: string;
+    } = {};
     const INSET = 0.12;
     const SIDE_INSET_LEFT = 0.28;
     const SIDE_INSET_RIGHT = 0.12;
-    const OVERLAY_FRACTION = 0.52;
+    /** Match UI: overlay is max 45% of content area × scale (0.4–1.2). Use 0.68 so export appears at least as big as on screen. */
+    const OVERLAY_FRACTION = 0.68;
 
     const frontBase = baseSrcs.front;
     const sideBase = baseSrcs.side;
@@ -506,6 +544,7 @@ const ImageOverlaySection = forwardRef<
         const oy = centerY - overlayMaxH / 2;
         drawOverlayContain(ctx, overlayImg, ox, oy, overlayMaxW, overlayMaxH);
         result.front = canvas.toDataURL("image/png");
+        result.frontDesignOnly = await exportDesignOnly(overlayFront);
       } catch {
         // skip if composition fails (e.g. CORS on external image)
       }
@@ -536,6 +575,7 @@ const ImageOverlaySection = forwardRef<
         const oy = centerY - overlayMaxH / 2;
         drawOverlayContain(ctx, overlayImg, ox, oy, overlayMaxW, overlayMaxH);
         result.side = canvas.toDataURL("image/png");
+        result.sideDesignOnly = await exportDesignOnly(overlaySide);
       } catch {
         // skip if composition fails
       }
@@ -549,6 +589,7 @@ const ImageOverlaySection = forwardRef<
     positionSide,
     scaleFront,
     scaleSide,
+    exportDesignOnly,
     baseImages?.front ?? FALLBACK_BASE_IMAGES.front,
     baseImages?.side ?? FALLBACK_BASE_IMAGES.side,
   ]);

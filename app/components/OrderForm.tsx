@@ -66,11 +66,16 @@ export default function OrderForm({
   products: ShopifyProduct[];
   productId: string;
   setProductId: (id: string) => void;
-  getPreviewImages?: () => Promise<{ front?: string; side?: string }>;
+  getPreviewImages?: () => Promise<{
+    front?: string;
+    side?: string;
+    frontDesignOnly?: string;
+    sideDesignOnly?: string;
+  }>;
   locations?: number;
 }) {
   const [email, setEmail] = useState("");
-  const [quantity, setQuantity] = useState(1);
+  const [quantity, setQuantity] = useState<string>("1");
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "ok" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -92,7 +97,10 @@ export default function OrderForm({
       setMessage("Email is required");
       return;
     }
-    const qty = Math.max(1, Math.floor(quantity));
+    const qty =
+      quantity === "" || quantity === null || Number(quantity) === 0 || Number.isNaN(Number(quantity))
+        ? 1
+        : Math.max(1, Math.floor(Number(quantity)));
     setStatus("sending");
     setMessage("");
     const { amount, currencyCode } = product.priceRange.minVariantPrice;
@@ -117,6 +125,7 @@ export default function OrderForm({
       quantity: qty,
       totalPrice: totalStr,
       note: note.trim() || undefined,
+      locationsCount: locations,
       decorationType,
       embroideryPreference:
         decorationType === "embroidery" ? embroideryPreference ?? undefined : undefined,
@@ -126,6 +135,8 @@ export default function OrderForm({
         decorationType === "leather" ? leatherColor ?? undefined : undefined,
       frontImageDataUrl: previewImages?.front,
       sideImageDataUrl: previewImages?.side,
+      frontDesignOnlyDataUrl: previewImages?.frontDesignOnly,
+      sideDesignOnlyDataUrl: previewImages?.sideDesignOnly,
     });
     if (result.success) {
       setStatus("ok");
@@ -142,7 +153,10 @@ export default function OrderForm({
   const unitPrice = selectedProduct
     ? parseFloat(selectedProduct.priceRange.minVariantPrice.amount)
     : 0;
-  const qty = Math.max(1, Math.floor(quantity));
+  const qty =
+    quantity === "" || quantity === null || Number(quantity) === 0 || Number.isNaN(Number(quantity))
+      ? 1
+      : Math.max(1, Math.floor(Number(quantity)));
   const locationMultiplier = locations >= 2 ? 2 : 1;
   const calculatedTotal = selectedProduct
     ? `${selectedProduct.priceRange.minVariantPrice.currencyCode} ${(
@@ -177,13 +191,14 @@ export default function OrderForm({
             type="number"
             min={1}
             value={quantity}
-            onChange={(e) =>
-              setQuantity(
-                e.target.value ? Math.max(1, parseInt(e.target.value, 10) || 1) : 1
-              )
-            }
+            onChange={(e) => setQuantity(e.target.value)}
+            onBlur={() => {
+              const n = Number(quantity);
+              if (quantity === "" || Number.isNaN(n) || n < 1) setQuantity("1");
+            }}
             className="w-full text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#d1d5db] focus:border-[#9ca3af]"
           />
+          <p className="text-xs text-[#6b7280] mt-1">Minimum 1. Leave empty to use 1.</p>
         </label>
         <div className="text-sm text-[#374151]">
           <span className="block mb-1 text-[#111827]">Decoration</span>
@@ -250,18 +265,18 @@ export default function OrderForm({
                             const shape = PATCH_SHAPES.find((s) => s.value === leatherOutline);
                             return shape ? (
                               <>
-                                <span className="flex w-8 h-8 shrink-0 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb] overflow-hidden">
+                                <span className="flex w-10 h-10 shrink-0 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
                                   <img
                                     src={shape.image}
                                     alt=""
-                                    className="h-5 w-5 object-contain"
+                                    className="h-7 w-7 object-contain"
                                   />
                                 </span>
                                 <span className="truncate">{shape.label}</span>
                               </>
                             ) : (
                               <>
-                                <span className="flex w-8 h-8 shrink-0 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb]" />
+                                <span className="flex w-10 h-10 shrink-0 items-center justify-center rounded-md bg-white border border-[#e5e7eb]" />
                                 <span className="truncate capitalize">{leatherOutline}</span>
                               </>
                             );
@@ -277,11 +292,11 @@ export default function OrderForm({
                           key={shape.value}
                           onSelect={() => setLeatherOutline(shape.value)}
                         >
-                          <span className="flex w-8 h-8 shrink-0 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb] overflow-hidden">
+                          <span className="flex w-10 h-10 shrink-0 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
                             <img
                               src={shape.image}
                               alt=""
-                              className="h-5 w-5 object-contain"
+                              className="h-7 w-7 object-contain"
                             />
                           </span>
                           <span>{shape.label}</span>
@@ -300,7 +315,7 @@ export default function OrderForm({
                       >
                         {leatherColor ? (
                           <>
-                            <span className="flex w-8 h-8 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb] overflow-hidden">
+                            <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
                               <span className="w-full h-full flex">
                                 <span className="w-1/2 h-full bg-[#92400e]" />
                                 <span className="w-1/2 h-full bg-black" />
@@ -325,7 +340,7 @@ export default function OrderForm({
                           key={combo}
                           onSelect={() => setLeatherColor(combo)}
                         >
-                          <span className="flex w-8 h-8 items-center justify-center rounded-md bg-[#f3f4f6] border border-[#e5e7eb] overflow-hidden">
+                          <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
                             <span className="w-full h-full flex">
                               <span className="w-1/2 h-full bg-[#e5b27b]" />
                               <span className="w-1/2 h-full bg-black" />
@@ -432,6 +447,11 @@ export default function OrderForm({
               Estimated total
             </p>
             <p className="text-base text-[#111827] mt-0.5">{calculatedTotal}</p>
+            {locations >= 2 && (
+              <p className="text-xs text-[#374151] mt-1 font-medium">
+                Price is doubled because your design is applied to both front and side.
+              </p>
+            )}
             <p className="text-xs text-[#6b7280] mt-1">
               Any new clients could be subject to a $35 setup fee.
             </p>

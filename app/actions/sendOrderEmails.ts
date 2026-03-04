@@ -10,8 +10,13 @@ export type SendOrderEmailsInput = {
   quantity?: number;
   totalPrice?: string;
   note?: string;
+  /** Number of design locations (front + side). When >= 2, price is doubled. */
+  locationsCount?: number;
   frontImageDataUrl?: string;
   sideImageDataUrl?: string;
+  /** User's design/artwork only (for download), JPEG */
+  frontDesignOnlyDataUrl?: string;
+  sideDesignOnlyDataUrl?: string;
   decorationType?: "embroidery" | "leather";
   embroideryPreference?: "yes" | "no";
   leatherOutline?: string;
@@ -46,7 +51,14 @@ export async function sendOrderEmails(
       return { success: false, error: "Server: EMAIL_USER not configured" };
     }
 
-    const qty = input.quantity ?? 1;
+    const qty = Math.max(1, input.quantity ?? 1);
+    const isDoubleLocation = (input.locationsCount ?? 0) >= 2;
+    const priceReasonText = isDoubleLocation
+      ? " (Price is doubled because the design is applied to both front and side.)"
+      : "";
+    const priceReasonHtml = isDoubleLocation
+      ? '<p style="margin:0.25em 0 0;font-size:13px;color:#4b5563;">Price is doubled because the design is applied to both front and side.</p>'
+      : "";
 
     // Single decoration block: either embroidery OR leather (never both)
     const decorationText =
@@ -69,13 +81,13 @@ export async function sendOrderEmails(
 
     const priceText =
       input.productPrice && input.totalPrice
-        ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35\nTotal: ${input.totalPrice}\n`
+        ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35\nTotal: ${input.totalPrice}${priceReasonText}\n`
         : input.productPrice
-          ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35\n`
+          ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35${priceReasonText}\n`
           : "";
     const priceHtml =
       input.productPrice
-        ? `<section style="margin:1em 0"><strong>Unit price:</strong> ${input.productPrice}<br/><strong>Quantity:</strong> ${qty}<br/><strong>Setup fee:</strong> $35${input.totalPrice ? `<br/><strong>Total:</strong> ${input.totalPrice}` : ""}</section>`
+        ? `<section style="margin:1em 0"><strong>Unit price:</strong> ${input.productPrice}<br/><strong>Quantity:</strong> ${qty}<br/><strong>Setup fee:</strong> $35${input.totalPrice ? `<br/><strong>Total:</strong> ${input.totalPrice}` : ""}${priceReasonHtml}</section>`
         : "";
 
     const noteText = input.note?.trim() ? `Note: ${input.note.trim()}\n` : "";
@@ -83,21 +95,26 @@ export async function sendOrderEmails(
       ? `<section style="margin:1em 0"><strong>Note:</strong> ${input.note.trim()}</section>`
       : "";
 
-    const attachments: { filename: string; content: Buffer }[] = [];
+    const compositeAttachments: { filename: string; content: Buffer }[] = [];
     if (input.frontImageDataUrl) {
       const buf = dataUrlToBuffer(input.frontImageDataUrl);
-      if (buf) attachments.push({ filename: "design-preview-front.png", content: buf });
+      if (buf) compositeAttachments.push({ filename: "design-front-preview.png", content: buf });
     }
     if (input.sideImageDataUrl) {
       const buf = dataUrlToBuffer(input.sideImageDataUrl);
-      if (buf) attachments.push({ filename: "design-preview-side.png", content: buf });
+      if (buf) compositeAttachments.push({ filename: "design-side-preview.png", content: buf });
     }
-    const attachmentHtml =
-      attachments.length > 0
-        ? `<section style="margin:1em 0"><strong>Design previews attached:</strong> ${attachments.map((a) => a.filename).join(", ")}</section>`
-        : "";
+    const businessAttachments: { filename: string; content: Buffer }[] = [...compositeAttachments];
+    if (input.frontDesignOnlyDataUrl) {
+      const buf = dataUrlToBuffer(input.frontDesignOnlyDataUrl);
+      if (buf) businessAttachments.push({ filename: "design-front-artwork.jpg", content: buf });
+    }
+    if (input.sideDesignOnlyDataUrl) {
+      const buf = dataUrlToBuffer(input.sideDesignOnlyDataUrl);
+      if (buf) businessAttachments.push({ filename: "design-side-artwork.jpg", content: buf });
+    }
 
-    // Plain-text body: ordered sections for client and business
+    // Plain-text body: ordered sections for client and business (no attachment list in body)
     const customerTextSections = [
       `Product: ${input.productTitle}`,
       priceText,
@@ -111,25 +128,96 @@ export async function sendOrderEmails(
       priceText,
       decorationText,
       noteText,
-      attachments.length > 0 ? `Attachments: ${attachments.map((a) => a.filename).join(", ")}` : "",
     ].filter(Boolean);
 
-    // 1. Order confirmation to customer (clear order, no attachments in body text)
+    const emailStyles = {
+      wrap: "max-width:560px;margin:0 auto;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111827;",
+      header: "padding:24px 28px;background:#111827;color:#fff;text-align:center;",
+      logo: "font-size:22px;font-weight:700;letter-spacing:0.02em;",
+      body: "padding:28px;background:#fff;",
+      section: "margin:0 0 20px;padding:0;",
+      label: "font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;margin:0 0 4px;",
+      value: "font-size:15px;color:#111827;margin:0;",
+      footer: "padding:20px 28px;font-size:13px;color:#6b7280;background:#f9fafb;border-top:1px solid #e5e7eb;",
+    };
+
+    const decorationInline = input.decorationType === "embroidery" && input.embroideryPreference
+      ? `Type: Embroidery · Wanted: ${input.embroideryPreference === "yes" ? "Yes" : "No"}`
+      : input.decorationType === "leather"
+        ? `Type: Leather patch${input.leatherOutline ? ` · Outline: ${input.leatherOutline}` : ""}${input.leatherColor ? ` · Color: ${input.leatherColor}` : ""}`
+        : "";
+
+    const customerHtml = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;background:#f3f4f6;">
+  <div style="${emailStyles.wrap}">
+    <div style="${emailStyles.header}">
+      <div style="${emailStyles.logo}">AVhatco</div>
+      <p style="margin:8px 0 0;font-size:14px;opacity:0.9;">Order confirmation</p>
+    </div>
+    <div style="${emailStyles.body}">
+      <p style="margin:0 0 20px;font-size:15px;">Thank you for your order.</p>
+      <section style="${emailStyles.section}">
+        <p style="${emailStyles.label}">Product</p>
+        <p style="${emailStyles.value}">${input.productTitle}</p>
+      </section>
+      ${input.productPrice ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Pricing</p><p style="${emailStyles.value}">Unit price: ${input.productPrice}<br/>Quantity: ${qty}<br/>Setup fee: $35${input.totalPrice ? `<br/><strong>Total: ${input.totalPrice}</strong>` : ""}${priceReasonHtml}</p></section>` : ""}
+      ${decorationInline ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Decoration</p><p style="${emailStyles.value}">${decorationInline}</p></section>` : ""}
+      ${input.note?.trim() ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Note</p><p style="${emailStyles.value}">${input.note.trim()}</p></section>` : ""}
+      <p style="margin:20px 0 0;font-size:14px;color:#4b5563;">We will process your request shortly.</p>
+    </div>
+    <div style="${emailStyles.footer}">AVhatco · Custom hat request</div>
+  </div>
+</body>
+</html>`;
+
+    const businessHtml = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;background:#f3f4f6;">
+  <div style="${emailStyles.wrap}">
+    <div style="${emailStyles.header}">
+      <div style="${emailStyles.logo}">AVhatco</div>
+      <p style="margin:8px 0 0;font-size:14px;opacity:0.9;">New order alert</p>
+    </div>
+    <div style="${emailStyles.body}">
+      <section style="${emailStyles.section}">
+        <p style="${emailStyles.label}">Customer</p>
+        <p style="${emailStyles.value}">${email}</p>
+      </section>
+      <section style="${emailStyles.section}">
+        <p style="${emailStyles.label}">Product</p>
+        <p style="${emailStyles.value}">${input.productTitle}</p>
+      </section>
+      ${input.productPrice ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Pricing</p><p style="${emailStyles.value}">Unit price: ${input.productPrice}<br/>Quantity: ${qty}<br/>Setup fee: $35${input.totalPrice ? `<br/><strong>Total: ${input.totalPrice}</strong>` : ""}${priceReasonHtml}</p></section>` : ""}
+      ${decorationInline ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Decoration</p><p style="${emailStyles.value}">${decorationInline}</p></section>` : ""}
+      ${input.note?.trim() ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Note</p><p style="${emailStyles.value}">${input.note.trim()}</p></section>` : ""}
+      <p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Design images are attached to this email.</p>
+    </div>
+    <div style="${emailStyles.footer}">AVhatco · Custom hat request</div>
+  </div>
+</body>
+</html>`;
+
+    // 1. Order confirmation to customer: composites only (no design-only artwork)
     await sendMail({
       to: email,
-      subject: "Order confirmation",
+      subject: "Order confirmation – AVhatco",
       text: `Thank you for your order.\n\n${customerTextSections.join("\n")}`,
-      html: `<p>Thank you for your order.</p><section style="margin:1em 0"><strong>Product:</strong> ${input.productTitle}</section>${priceHtml}${decorationHtml}${noteHtml}<p>We will process your request shortly.</p>`,
-      ...(attachments.length > 0 ? { attachments } : {}),
+      html: customerHtml,
+      ...(compositeAttachments.length > 0 ? { attachments: compositeAttachments } : {}),
     });
 
-    // 2. Order alert to business (same order, plus attachments list)
+    // 2. Order alert to business: composites + design-only artwork for production
     await sendMail({
       to: businessEmail,
-      subject: "New order alert",
+      subject: "New order alert – AVhatco",
       text: `New order submitted.\n\n${businessTextSections.join("\n")}`,
-      html: `<p>New order submitted.</p><section style="margin:1em 0"><strong>Customer:</strong> ${email}</section><section style="margin:1em 0"><strong>Product:</strong> ${input.productTitle}</section>${priceHtml}${decorationHtml}${noteHtml}${attachmentHtml}`,
-      attachments,
+      html: businessHtml,
+      attachments: businessAttachments,
     });
 
     return { success: true };

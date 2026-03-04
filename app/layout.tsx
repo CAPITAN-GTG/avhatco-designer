@@ -99,7 +99,7 @@ const helvetica = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Custom Designer",
+  title: "AVHatco Designer",
   description: "A polished product customization experience.",
 };
 

@@ -110,8 +110,12 @@ export default function OrderForm({
     const total = subtotal + SETUP_FEE;
     const priceStr = `${currencyCode} ${amount}`;
     const totalStr = `${currencyCode} ${total.toFixed(2)}`;
-    const previewImages: { front?: string; side?: string } =
-      (await getPreviewImages?.().catch(() => ({}))) ?? {};
+    const previewImages: {
+      front?: string;
+      side?: string;
+      frontDesignOnly?: string;
+      sideDesignOnly?: string;
+    } = (await getPreviewImages?.().catch(() => ({}))) ?? {};
     if (!previewImages.front && !previewImages.side) {
       setStatus("error");
       setMessage("Please upload at least one design image (front or side)");

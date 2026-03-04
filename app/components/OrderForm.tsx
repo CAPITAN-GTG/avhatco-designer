@@ -331,6 +331,42 @@ export default function OrderForm({
               </TabsContent>
             </Tabs>
           </div>
+          <div className="mt-4 border border-[#e5e7eb] bg-white">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-[#d1d5db]">
+                  <th className="text-left font-medium text-[#374151] px-3 py-2.5 border-r border-[#d1d5db]">
+                    Buy quantity
+                  </th>
+                  <th className="text-right font-medium text-[#374151] px-3 py-2.5">
+                    Discounted rate
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="text-[#4b5563]">
+                <tr className="border-b border-[#d1d5db]">
+                  <td className="px-3 py-2 border-r border-[#d1d5db]">Buy 12 – 23</td>
+                  <td className="px-3 py-2 text-right">$20.00 each</td>
+                </tr>
+                <tr className="border-b border-[#d1d5db]">
+                  <td className="px-3 py-2 border-r border-[#d1d5db]">Buy 24 – 47</td>
+                  <td className="px-3 py-2 text-right">$18.00 each</td>
+                </tr>
+                <tr className="border-b border-[#d1d5db]">
+                  <td className="px-3 py-2 border-r border-[#d1d5db]">Buy 48 – 95</td>
+                  <td className="px-3 py-2 text-right">$16.00 each</td>
+                </tr>
+                <tr className="border-b border-[#d1d5db]">
+                  <td className="px-3 py-2 border-r border-[#d1d5db]">Buy 96 – 143</td>
+                  <td className="px-3 py-2 text-right">$15.00 each</td>
+                </tr>
+                <tr className="border-b border-[#d1d5db]">
+                  <td className="px-3 py-2 border-r border-[#d1d5db]">Buy 144+</td>
+                  <td className="px-3 py-2 text-right">$14.00 each</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <label className="text-sm text-[#374151]">
           <span className="block mb-1.5 text-[#374151]">Select product</span>

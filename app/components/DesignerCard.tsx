@@ -74,6 +74,7 @@ export default function DesignerCard({
   const [ready, setReady] = useState(products.length === 0);
   const [loadedCount, setLoadedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [locationCount, setLocationCount] = useState(0);
   const selectedProduct = productId
     ? (products.find((p) => p.id === productId) ?? null)
     : null;
@@ -158,7 +159,11 @@ export default function DesignerCard({
     <div className="rounded-2xl bg-white border border-[#e5e7eb] overflow-hidden">
       <div className="flex flex-col xl:flex-row">
         <div className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
-          <ImageOverlaySection ref={overlaySectionRef} baseImages={baseImages} />
+          <ImageOverlaySection
+            ref={overlaySectionRef}
+            baseImages={baseImages}
+            onLocationsChange={setLocationCount}
+          />
         </div>
 
         <div className="border-t border-[#e5e7eb] xl:border-t-0 xl:border-l xl:w-[420px] shrink-0 p-4 sm:p-6 lg:p-8 bg-[#fcfcfd]">
@@ -167,6 +172,7 @@ export default function DesignerCard({
             productId={productId}
             setProductId={setProductId}
             getPreviewImages={getPreviewImages}
+            locations={locationCount}
           />
         </div>
       </div>

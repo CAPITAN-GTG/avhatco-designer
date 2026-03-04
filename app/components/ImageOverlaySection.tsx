@@ -423,8 +423,8 @@ function Slot({
 
 const ImageOverlaySection = forwardRef<
   ImageOverlaySectionHandle,
-  { baseImages?: BaseImages }
->(function ImageOverlaySection({ baseImages = null }, ref) {
+  { baseImages?: BaseImages; onLocationsChange?: (count: number) => void }
+>(function ImageOverlaySection({ baseImages = null, onLocationsChange }, ref) {
   const [overlayFront, setOverlayFront] = useState<string | null>(null);
   const [overlaySide, setOverlaySide] = useState<string | null>(null);
   const [positionFront, setPositionFront] = useState<NormalizedPosition>(CENTER_POSITION);
@@ -453,6 +453,12 @@ const ImageOverlaySection = forwardRef<
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!onLocationsChange) return;
+    const count = (overlayFront ? 1 : 0) + (overlaySide ? 1 : 0);
+    onLocationsChange(count);
+  }, [overlayFront, overlaySide, onLocationsChange]);
 
   const handleFile = useCallback(
     (slot: Slot) => (file: File) => setOverlay(slot, file),

@@ -61,11 +61,13 @@ export default function OrderForm({
   productId,
   setProductId,
   getPreviewImages,
+  locations = 0,
 }: {
   products: ShopifyProduct[];
   productId: string;
   setProductId: (id: string) => void;
   getPreviewImages?: () => Promise<{ front?: string; side?: string }>;
+  locations?: number;
 }) {
   const [email, setEmail] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -95,7 +97,8 @@ export default function OrderForm({
     setMessage("");
     const { amount, currencyCode } = product.priceRange.minVariantPrice;
     const unitPrice = parseFloat(amount);
-    const subtotal = unitPrice * qty;
+    const locationMultiplier = locations >= 2 ? 2 : 1;
+    const subtotal = unitPrice * qty * locationMultiplier;
     const total = subtotal + SETUP_FEE;
     const priceStr = `${currencyCode} ${amount}`;
     const totalStr = `${currencyCode} ${total.toFixed(2)}`;
@@ -140,8 +143,12 @@ export default function OrderForm({
     ? parseFloat(selectedProduct.priceRange.minVariantPrice.amount)
     : 0;
   const qty = Math.max(1, Math.floor(quantity));
+  const locationMultiplier = locations >= 2 ? 2 : 1;
   const calculatedTotal = selectedProduct
-    ? `${selectedProduct.priceRange.minVariantPrice.currencyCode} ${(unitPrice * qty + SETUP_FEE).toFixed(2)}`
+    ? `${selectedProduct.priceRange.minVariantPrice.currencyCode} ${(
+        unitPrice * qty * locationMultiplier +
+        SETUP_FEE
+      ).toFixed(2)}`
     : null;
 
   return (
@@ -426,7 +433,10 @@ export default function OrderForm({
             </p>
             <p className="text-base text-[#111827] mt-0.5">{calculatedTotal}</p>
             <p className="text-xs text-[#6b7280] mt-1">
-              Includes $35 setup fee.
+              Any new clients could be subject to a $35 setup fee.
+            </p>
+            <p className="text-xs text-[#6b7280]">
+              If you&apos;ve already worked with us, the fee will be waived.
             </p>
           </div>
         )}

@@ -1,5 +1,11 @@
 import nodemailer from "nodemailer";
 
+export type EmailAttachment = {
+  filename: string;
+  content: Buffer;
+  cid?: string;
+};
+
 export function getMailTransporter() {
   const user = process.env.EMAIL_USER?.trim();
   const pass = process.env.APP_PASSWORD?.trim();
@@ -19,7 +25,7 @@ export async function sendMail(options: {
   subject: string;
   text: string;
   html?: string;
-  attachments?: { filename: string; content: Buffer }[];
+  attachments?: EmailAttachment[];
 }): Promise<void> {
   const user = process.env.EMAIL_USER?.trim();
   if (!user) throw new Error("Missing EMAIL_USER");

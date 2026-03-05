@@ -1,6 +1,8 @@
 "use server";
 
-import { sendMail } from "../lib/email";
+import fs from "fs";
+import path from "path";
+import { sendMail, type EmailAttachment } from "../lib/email";
 
 export type SendOrderEmailsInput = {
   customerEmail: string;
@@ -95,7 +97,8 @@ export async function sendOrderEmails(
       ? `<section style="margin:1em 0"><strong>Note:</strong> ${input.note.trim()}</section>`
       : "";
 
-    const compositeAttachments: { filename: string; content: Buffer }[] = [];
+    // Design preview & artwork attachments
+    const compositeAttachments: EmailAttachment[] = [];
     if (input.frontImageDataUrl) {
       const buf = dataUrlToBuffer(input.frontImageDataUrl);
       if (buf) compositeAttachments.push({ filename: "design-front-preview.png", content: buf });
@@ -104,7 +107,7 @@ export async function sendOrderEmails(
       const buf = dataUrlToBuffer(input.sideImageDataUrl);
       if (buf) compositeAttachments.push({ filename: "design-side-preview.png", content: buf });
     }
-    const businessAttachments: { filename: string; content: Buffer }[] = [...compositeAttachments];
+    const businessAttachments: EmailAttachment[] = [...compositeAttachments];
     if (input.frontDesignOnlyDataUrl) {
       const buf = dataUrlToBuffer(input.frontDesignOnlyDataUrl);
       if (buf) businessAttachments.push({ filename: "design-front-artwork.jpg", content: buf });
@@ -112,6 +115,26 @@ export async function sendOrderEmails(
     if (input.sideDesignOnlyDataUrl) {
       const buf = dataUrlToBuffer(input.sideDesignOnlyDataUrl);
       if (buf) businessAttachments.push({ filename: "design-side-artwork.jpg", content: buf });
+    }
+
+    // Inline logo for email header (from public/logo.png)
+    let logoAttachment: EmailAttachment | null = null;
+    try {
+      const logoPath = path.join(process.cwd(), "public", "logo.png");
+      const logoBuffer = await fs.promises.readFile(logoPath);
+      logoAttachment = {
+        filename: "logo.png",
+        content: logoBuffer,
+        cid: "brand-logo",
+      };
+    } catch {
+      // If logo can't be read, continue without inline logo.
+    }
+
+    const customerAttachments: EmailAttachment[] = [...compositeAttachments];
+    if (logoAttachment) {
+      customerAttachments.push(logoAttachment);
+      businessAttachments.push(logoAttachment);
     }
 
     // Plain-text body: ordered sections for client and business (no attachment list in body)
@@ -154,7 +177,9 @@ export async function sendOrderEmails(
 <body style="margin:0;background:#f3f4f6;">
   <div style="${emailStyles.wrap}">
     <div style="${emailStyles.header}">
-      <div style="${emailStyles.logo}">AVhatco</div>
+      <div style="${emailStyles.logo}">
+        <img src="cid:brand-logo" alt="AVhatco" style="max-width:140px;height:auto;display:block;margin:0 auto;" />
+      </div>
       <p style="margin:8px 0 0;font-size:14px;opacity:0.9;">Order confirmation</p>
     </div>
     <div style="${emailStyles.body}">
@@ -180,7 +205,9 @@ export async function sendOrderEmails(
 <body style="margin:0;background:#f3f4f6;">
   <div style="${emailStyles.wrap}">
     <div style="${emailStyles.header}">
-      <div style="${emailStyles.logo}">AVhatco</div>
+      <div style="${emailStyles.logo}">
+        <img src="cid:brand-logo" alt="AVhatco" style="max-width:140px;height:auto;display:block;margin:0 auto;" />
+      </div>
       <p style="margin:8px 0 0;font-size:14px;opacity:0.9;">New order alert</p>
     </div>
     <div style="${emailStyles.body}">
@@ -205,16 +232,16 @@ export async function sendOrderEmails(
     // 1. Order confirmation to customer: composites only (no design-only artwork)
     await sendMail({
       to: email,
-      subject: "Order confirmation – AVhatco",
+      subject: "𐚁 Order confirmation – AVhatco",
       text: `Thank you for your order.\n\n${customerTextSections.join("\n")}`,
       html: customerHtml,
-      ...(compositeAttachments.length > 0 ? { attachments: compositeAttachments } : {}),
+      attachments: customerAttachments.length > 0 ? customerAttachments : undefined,
     });
 
     // 2. Order alert to business: composites + design-only artwork for production
     await sendMail({
       to: businessEmail,
-      subject: "New order alert – AVhatco",
+      subject: "𐚁 New order alert – AVhatco",
       text: `New order submitted.\n\n${businessTextSections.join("\n")}`,
       html: businessHtml,
       attachments: businessAttachments,

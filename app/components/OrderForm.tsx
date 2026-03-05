@@ -23,6 +23,14 @@ const PATCH_SHAPES: { value: string; label: string; image: string }[] = [
   { value: "die cut", label: "Die cut", image: "/die-cut.png" },
 ];
 
+const LEATHER_COLORS: { value: string; label: string; image: string }[] = [
+  { value: "rawhide/black", label: "Rawhide / Black", image: "/rawhide.jpeg" },
+  { value: "gray/black", label: "Gray / Black", image: "/aluminum_silver.jpeg" },
+  { value: "light brown/black", label: "Light brown / Black", image: "/rustic_gold.jpeg" },
+  { value: "dark brown/black", label: "Dark brown / Black", image: "/aluminum_gold.jpeg" },
+  { value: "white/gold", label: "White / Gold", image: "/holographic_leatherette.jpeg" },
+];
+
 function ProductItem({
   product,
   onSelect,
@@ -318,39 +326,54 @@ export default function OrderForm({
                         className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] flex items-center gap-2.5 min-h-10 hover:bg-[#f9fafb]"
                       >
                         {leatherColor ? (
-                          <>
-                            <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
-                              <span className="w-full h-full flex">
-                                <span className="w-1/2 h-full bg-[#92400e]" />
-                                <span className="w-1/2 h-full bg-black" />
-                              </span>
-                            </span>
-                            <span className="truncate capitalize">{leatherColor}</span>
-                          </>
+                          (() => {
+                            const option = LEATHER_COLORS.find(
+                              (c) => c.value === leatherColor
+                            );
+                            return option ? (
+                              <>
+                                <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
+                                  <img
+                                    src={option.image}
+                                    alt={option.label}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </span>
+                                <span className="truncate">{option.label}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
+                                  <span className="w-full h-full flex">
+                                    <span className="w-1/2 h-full bg-[#e5b27b]" />
+                                    <span className="w-1/2 h-full bg-black" />
+                                  </span>
+                                </span>
+                                <span className="truncate capitalize">
+                                  {leatherColor}
+                                </span>
+                              </>
+                            );
+                          })()
                         ) : (
                           <span className="text-[#888]">Choose color</span>
                         )}
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
-                      {[
-                        "rawhide/black",
-                        "gray/black",
-                        "light brown/black",
-                        "dark brown/black",
-                        "white/gold",
-                      ].map((combo) => (
+                      {LEATHER_COLORS.map((option) => (
                         <DropdownMenuItem
-                          key={combo}
-                          onSelect={() => setLeatherColor(combo)}
+                          key={option.value}
+                          onSelect={() => setLeatherColor(option.value)}
                         >
                           <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
-                            <span className="w-full h-full flex">
-                              <span className="w-1/2 h-full bg-[#e5b27b]" />
-                              <span className="w-1/2 h-full bg-black" />
-                            </span>
+                            <img
+                              src={option.image}
+                              alt={option.label}
+                              className="w-full h-full object-cover"
+                            />
                           </span>
-                          <span className="capitalize">{combo}</span>
+                          <span>{option.label}</span>
                         </DropdownMenuItem>
                       ))}
                     </DropdownMenuContent>

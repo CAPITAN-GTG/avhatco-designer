@@ -14,6 +14,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 type DecorationType = "embroidery" | "leather";
 
 const SETUP_FEE = 35;
+const MIN_QUANTITY = 12;
+
+/** Quantity tiers: [min quantity, price per unit]. Order descending by min qty so we can find tier by qty >= min. */
+const QUANTITY_TIERS: [number, number][] = [
+  [144, 14],
+  [96, 15],
+  [48, 16],
+  [24, 18],
+  [12, 20],
+];
+
+function getUnitPriceForQuantity(qty: number): number {
+  const tier = QUANTITY_TIERS.find(([min]) => qty >= min);
+  return tier ? tier[1] : QUANTITY_TIERS[QUANTITY_TIERS.length - 1]![1];
+}
 
 const PATCH_SHAPES: { value: string; label: string; image: string }[] = [
   { value: "circle", label: "Circle", image: "/circle.png" },
@@ -24,11 +39,11 @@ const PATCH_SHAPES: { value: string; label: string; image: string }[] = [
 ];
 
 const LEATHER_COLORS: { value: string; label: string; image: string }[] = [
-  { value: "rawhide/black", label: "Rawhide / Black", image: "/rawhide.jpeg" },
-  { value: "gray/black", label: "Gray / Black", image: "/aluminum_silver.jpeg" },
-  { value: "light brown/black", label: "Light brown / Black", image: "/rustic_gold.jpeg" },
-  { value: "dark brown/black", label: "Dark brown / Black", image: "/aluminum_gold.jpeg" },
-  { value: "white/gold", label: "White / Gold", image: "/holographic_leatherette.jpeg" },
+  { value: "Rawhide", label: "Rawhide", image: "/rawhide.jpeg" },
+  { value: "Aluminum Gold", label: "Aluminum Gold", image: "/aluminum_gold.jpeg" },
+  { value: "Aluminum Silver", label: "Aluminum Silver", image: "/aluminum_silver.jpeg" },
+  { value: "Rustic Gold", label: "Rustic Gold", image: "/rustic_gold.jpeg" },
+  { value: "Holographic Leatherette", label: "Holographic Leatherette", image: "/holographic_leatherette.jpeg" },
 ];
 
 function ProductItem({
@@ -83,7 +98,7 @@ export default function OrderForm({
   locations?: number;
 }) {
   const [email, setEmail] = useState("");
-  const [quantity, setQuantity] = useState<string>("1");
+  const [quantity, setQuantity] = useState<string>(String(MIN_QUANTITY));
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "ok" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -107,16 +122,16 @@ export default function OrderForm({
     }
     const qty =
       quantity === "" || quantity === null || Number(quantity) === 0 || Number.isNaN(Number(quantity))
-        ? 1
-        : Math.max(1, Math.floor(Number(quantity)));
+        ? MIN_QUANTITY
+        : Math.max(MIN_QUANTITY, Math.floor(Number(quantity)));
     setStatus("sending");
     setMessage("");
-    const { amount, currencyCode } = product.priceRange.minVariantPrice;
-    const unitPrice = parseFloat(amount);
+    const { currencyCode } = product.priceRange.minVariantPrice;
+    const unitPrice = getUnitPriceForQuantity(qty);
     const locationMultiplier = locations >= 2 ? 2 : 1;
     const subtotal = unitPrice * qty * locationMultiplier;
     const total = subtotal + SETUP_FEE;
-    const priceStr = `${currencyCode} ${amount}`;
+    const priceStr = `${currencyCode} ${unitPrice.toFixed(2)}`;
     const totalStr = `${currencyCode} ${total.toFixed(2)}`;
     const previewImages: {
       front?: string;
@@ -162,20 +177,19 @@ export default function OrderForm({
   if (products.length === 0) return null;
 
   const selectedProduct = productId ? products.find((x) => x.id === productId) : null;
-  const unitPrice = selectedProduct
-    ? parseFloat(selectedProduct.priceRange.minVariantPrice.amount)
-    : 0;
   const qty =
     quantity === "" || quantity === null || Number(quantity) === 0 || Number.isNaN(Number(quantity))
-      ? 1
-      : Math.max(1, Math.floor(Number(quantity)));
+      ? MIN_QUANTITY
+      : Math.max(MIN_QUANTITY, Math.floor(Number(quantity)));
+  const unitPrice = getUnitPriceForQuantity(qty);
   const locationMultiplier = locations >= 2 ? 2 : 1;
-  const calculatedTotal = selectedProduct
-    ? `${selectedProduct.priceRange.minVariantPrice.currencyCode} ${(
-        unitPrice * qty * locationMultiplier +
-        SETUP_FEE
-      ).toFixed(2)}`
-    : null;
+  const currencyCode = selectedProduct?.priceRange.minVariantPrice.currencyCode ?? "USD";
+  const subtotal = unitPrice * qty * locationMultiplier;
+  const total = selectedProduct ? subtotal + SETUP_FEE : 0;
+  const calculatedTotal =
+    selectedProduct
+      ? { currencyCode, subtotal, total }
+      : null;
 
   return (
     <div className="w-full xl:sticky xl:top-8">
@@ -201,21 +215,23 @@ export default function OrderForm({
           <span className="block mb-1.5 text-[#374151]">Quantity</span>
           <input
             type="number"
-            min={1}
+            min={MIN_QUANTITY}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             onBlur={() => {
               const n = Number(quantity);
-              if (quantity === "" || Number.isNaN(n) || n < 1) setQuantity("1");
+              if (quantity === "" || Number.isNaN(n) || n < MIN_QUANTITY) setQuantity(String(MIN_QUANTITY));
             }}
             className="w-full text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#d1d5db] focus:border-[#9ca3af]"
           />
-          <p className="text-xs text-[#6b7280] mt-1">Minimum 1. Leave empty to use 1.</p>
+          <p className="text-xs text-[#6b7280] mt-1">
+            Minimum order quantity is {MIN_QUANTITY} units. This allows us to maintain production efficiency and consistent quality for your order.
+          </p>
         </label>
         <div className="text-sm text-[#374151]">
           <span className="block mb-1 text-[#111827]">Decoration</span>
           <p className="text-xs text-[#4b5563] mb-2">
-            Choose one: send either embroidery or leather patch details (not both).
+            Choose one: send either embroidery or leatherette patch details (not both).
           </p>
           <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden shadow-sm">
             <Tabs
@@ -247,7 +263,7 @@ export default function OrderForm({
                     value="leather"
                     className="flex-1 rounded-none rounded-tr-xl border-0 bg-transparent py-3 text-sm font-medium text-[#6b7280] data-[state=active]:bg-white data-[state=active]:text-[#111827] data-[state=active]:shadow-[0_-1px_0_0_inset] hover:text-[#374151] hover:bg-white/50 after:hidden"
                   >
-                    Leather patch
+                    Leatherette patch
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -270,25 +286,25 @@ export default function OrderForm({
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] flex items-center gap-2.5 min-h-10 hover:bg-[#f9fafb]"
+                        className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] flex items-center gap-3 min-h-14 sm:min-h-16 hover:bg-[#f9fafb]"
                       >
                         {leatherOutline ? (
                           (() => {
                             const shape = PATCH_SHAPES.find((s) => s.value === leatherOutline);
                             return shape ? (
                               <>
-                                <span className="flex w-10 h-10 shrink-0 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
+                                <span className="flex w-16 h-16 sm:w-20 sm:h-20 shrink-0 items-center justify-center rounded-lg bg-white border border-[#e5e7eb] overflow-hidden p-1.5">
                                   <img
                                     src={shape.image}
                                     alt=""
-                                    className="h-7 w-7 object-contain"
+                                    className="w-full h-full object-contain"
                                   />
                                 </span>
                                 <span className="truncate">{shape.label}</span>
                               </>
                             ) : (
                               <>
-                                <span className="flex w-10 h-10 shrink-0 items-center justify-center rounded-md bg-white border border-[#e5e7eb]" />
+                                <span className="flex w-16 h-16 sm:w-20 sm:h-20 shrink-0 items-center justify-center rounded-lg bg-white border border-[#e5e7eb]" />
                                 <span className="truncate capitalize">{leatherOutline}</span>
                               </>
                             );
@@ -298,17 +314,17 @@ export default function OrderForm({
                         )}
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
+                    <DropdownMenuContent align="start" className="min-w-[10rem] sm:min-w-[12rem]">
                       {PATCH_SHAPES.map((shape) => (
                         <DropdownMenuItem
                           key={shape.value}
                           onSelect={() => setLeatherOutline(shape.value)}
                         >
-                          <span className="flex w-10 h-10 shrink-0 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
+                          <span className="flex w-16 h-16 sm:w-20 sm:h-20 shrink-0 items-center justify-center rounded-lg bg-white border border-[#e5e7eb] overflow-hidden p-1.5">
                             <img
                               src={shape.image}
                               alt=""
-                              className="h-7 w-7 object-contain"
+                              className="w-full h-full object-contain"
                             />
                           </span>
                           <span>{shape.label}</span>
@@ -318,12 +334,12 @@ export default function OrderForm({
                   </DropdownMenu>
                 </div>
                 <div>
-                  <p className="text-xs text-[#4b5563] mb-1.5">Leather color</p>
+                  <p className="text-xs text-[#4b5563] mb-1.5">Leatherette color</p>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] flex items-center gap-2.5 min-h-10 hover:bg-[#f9fafb]"
+                        className="w-full text-left text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] flex items-center gap-3 min-h-14 sm:min-h-16 hover:bg-[#f9fafb]"
                       >
                         {leatherColor ? (
                           (() => {
@@ -332,7 +348,7 @@ export default function OrderForm({
                             );
                             return option ? (
                               <>
-                                <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
+                                <span className="flex w-16 h-16 sm:w-20 sm:h-20 shrink-0 items-center justify-center rounded-lg bg-white border border-[#e5e7eb] overflow-hidden">
                                   <img
                                     src={option.image}
                                     alt={option.label}
@@ -343,15 +359,13 @@ export default function OrderForm({
                               </>
                             ) : (
                               <>
-                                <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
+                                <span className="flex w-16 h-16 sm:w-20 sm:h-20 shrink-0 items-center justify-center rounded-lg bg-white border border-[#e5e7eb] overflow-hidden">
                                   <span className="w-full h-full flex">
                                     <span className="w-1/2 h-full bg-[#e5b27b]" />
                                     <span className="w-1/2 h-full bg-black" />
                                   </span>
                                 </span>
-                                <span className="truncate capitalize">
-                                  {leatherColor}
-                                </span>
+                                <span className="truncate">{leatherColor}</span>
                               </>
                             );
                           })()
@@ -360,13 +374,13 @@ export default function OrderForm({
                         )}
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
+                    <DropdownMenuContent align="start" className="min-w-[10rem] sm:min-w-[12rem]">
                       {LEATHER_COLORS.map((option) => (
                         <DropdownMenuItem
                           key={option.value}
                           onSelect={() => setLeatherColor(option.value)}
                         >
-                          <span className="flex w-10 h-10 items-center justify-center rounded-md bg-white border border-[#e5e7eb] overflow-hidden">
+                          <span className="flex w-16 h-16 sm:w-20 sm:h-20 shrink-0 items-center justify-center rounded-lg bg-white border border-[#e5e7eb] overflow-hidden">
                             <img
                               src={option.image}
                               alt={option.label}
@@ -469,21 +483,19 @@ export default function OrderForm({
           </DropdownMenu>
         </label>
         {calculatedTotal != null && (
-          <div className="rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5">
-            <p className="text-xs uppercase tracking-[0.08em] text-[#6b7280]">
+          <div className="rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 space-y-1.5">
+            <p className="text-xs uppercase tracking-[0.08em] text-[#6b7280] mb-2">
               Estimated total
             </p>
-            <p className="text-base text-[#111827] mt-0.5">{calculatedTotal}</p>
-            {locations >= 2 && (
-              <p className="text-xs text-[#374151] mt-1 font-medium">
-                Price is doubled because your design is applied to both front and side.
-              </p>
-            )}
-            <p className="text-xs text-[#6b7280] mt-1">
-              Any new clients could be subject to a $35 setup fee.
+            <p className="text-sm text-[#374151]">
+              {qty} × {currencyCode} {unitPrice.toFixed(2)}
+              {locationMultiplier >= 2 ? " × 2 (front + side)" : ""} = {currencyCode} {calculatedTotal.subtotal.toFixed(2)}
             </p>
-            <p className="text-xs text-[#6b7280]">
-              If you&apos;ve already worked with us, the fee will be waived.
+            <p className="text-sm text-[#6b7280]">
+              +{currencyCode} {SETUP_FEE} setup fee [new users only]
+            </p>
+            <p className="text-base font-medium text-[#111827] pt-1 border-t border-[#e5e7eb]">
+              Total: {currencyCode} {calculatedTotal.total.toFixed(2)}
             </p>
           </div>
         )}

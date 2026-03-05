@@ -53,7 +53,8 @@ export async function sendOrderEmails(
       return { success: false, error: "Server: EMAIL_USER not configured" };
     }
 
-    const qty = Math.max(1, input.quantity ?? 1);
+    const MIN_QUANTITY = 12;
+    const qty = Math.max(MIN_QUANTITY, input.quantity ?? MIN_QUANTITY);
     const isDoubleLocation = (input.locationsCount ?? 0) >= 2;
     const priceReasonText = isDoubleLocation
       ? " (Price is doubled because the design is applied to both front and side.)"
@@ -61,6 +62,9 @@ export async function sendOrderEmails(
     const priceReasonHtml = isDoubleLocation
       ? '<p style="margin:0.25em 0 0;font-size:13px;color:#4b5563;">Price is doubled because the design is applied to both front and side.</p>'
       : "";
+    const quantityDiscountNote = " (Per-unit rate by quantity.)";
+    const quantityDiscountNoteHtml =
+      '<p style="margin:0.25em 0 0;font-size:12px;color:#6b7280;">Per-unit rate by quantity.</p>';
 
     // Single decoration block: either embroidery OR leather (never both)
     const decorationText =
@@ -68,7 +72,7 @@ export async function sendOrderEmails(
         ? `Decoration: Embroidery\nWanted: ${input.embroideryPreference === "yes" ? "Yes" : "No"}\n`
         : input.decorationType === "leather"
           ? [
-              "Decoration: Leather patch\n",
+              "Decoration: Leatherette patch\n",
               input.leatherOutline ? `Outline: ${input.leatherOutline}\n` : "",
               input.leatherColor ? `Color: ${input.leatherColor}\n` : "",
             ].join("")
@@ -78,18 +82,18 @@ export async function sendOrderEmails(
       input.decorationType === "embroidery" && input.embroideryPreference
         ? `<section style="margin:1em 0"><strong>Decoration</strong><br/>Type: Embroidery<br/>Wanted: ${input.embroideryPreference === "yes" ? "Yes" : "No"}</section>`
         : input.decorationType === "leather"
-          ? `<section style="margin:1em 0"><strong>Decoration</strong><br/>Type: Leather patch${input.leatherOutline ? `<br/>Outline: ${input.leatherOutline}` : ""}${input.leatherColor ? `<br/>Color: ${input.leatherColor}` : ""}</section>`
+          ? `<section style="margin:1em 0"><strong>Decoration</strong><br/>Type: Leatherette patch${input.leatherOutline ? `<br/>Outline: ${input.leatherOutline}` : ""}${input.leatherColor ? `<br/>Color: ${input.leatherColor}` : ""}</section>`
           : "";
 
     const priceText =
       input.productPrice && input.totalPrice
-        ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35\nTotal: ${input.totalPrice}${priceReasonText}\n`
+        ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35\nTotal: ${input.totalPrice}${priceReasonText}${quantityDiscountNote}\n`
         : input.productPrice
-          ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35${priceReasonText}\n`
+          ? `Unit price: ${input.productPrice}\nQuantity: ${qty}\nSetup fee: $35${priceReasonText}${quantityDiscountNote}\n`
           : "";
     const priceHtml =
       input.productPrice
-        ? `<section style="margin:1em 0"><strong>Unit price:</strong> ${input.productPrice}<br/><strong>Quantity:</strong> ${qty}<br/><strong>Setup fee:</strong> $35${input.totalPrice ? `<br/><strong>Total:</strong> ${input.totalPrice}` : ""}${priceReasonHtml}</section>`
+        ? `<section style="margin:1em 0"><strong>Unit price:</strong> ${input.productPrice}<br/><strong>Quantity:</strong> ${qty}<br/><strong>Setup fee:</strong> $35${input.totalPrice ? `<br/><strong>Total:</strong> ${input.totalPrice}` : ""}${priceReasonHtml}${quantityDiscountNoteHtml}</section>`
         : "";
 
     const noteText = input.note?.trim() ? `Note: ${input.note.trim()}\n` : "";
@@ -167,7 +171,7 @@ export async function sendOrderEmails(
     const decorationInline = input.decorationType === "embroidery" && input.embroideryPreference
       ? `Type: Embroidery · Wanted: ${input.embroideryPreference === "yes" ? "Yes" : "No"}`
       : input.decorationType === "leather"
-        ? `Type: Leather patch${input.leatherOutline ? ` · Outline: ${input.leatherOutline}` : ""}${input.leatherColor ? ` · Color: ${input.leatherColor}` : ""}`
+        ? `Type: Leatherette patch${input.leatherOutline ? ` · Outline: ${input.leatherOutline}` : ""}${input.leatherColor ? ` · Color: ${input.leatherColor}` : ""}`
         : "";
 
     const customerHtml = `

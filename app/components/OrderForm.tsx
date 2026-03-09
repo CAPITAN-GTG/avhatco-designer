@@ -46,6 +46,14 @@ const LEATHER_COLORS: { value: string; label: string; image: string }[] = [
   { value: "Holographic Leatherette", label: "Holographic Leatherette", image: "/holographic_leatherette.jpeg" },
 ];
 
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  const len = digits.length;
+  if (len <= 3) return digits;
+  if (len <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 function ProductItem({
   product,
   onSelect,
@@ -98,6 +106,7 @@ export default function OrderForm({
   locations?: number;
 }) {
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [quantity, setQuantity] = useState<string>(String(MIN_QUANTITY));
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "ok" | "error">("idle");
@@ -118,6 +127,12 @@ export default function OrderForm({
     if (!email.trim()) {
       setStatus("error");
       setMessage("Email is required");
+      return;
+    }
+    const phoneDigits = phone.replace(/\D/g, "");
+    if (phone && phoneDigits.length !== 10) {
+      setStatus("error");
+      setMessage("Please enter a valid 10-digit phone number or leave it blank.");
       return;
     }
     const qty =
@@ -146,6 +161,7 @@ export default function OrderForm({
     }
     const result = await sendOrderEmails({
       customerEmail: email.trim(),
+      phone: phoneDigits ? formatPhone(phone) : undefined,
       productId: product.id,
       productTitle: product.title,
       productPrice: priceStr,
@@ -208,6 +224,16 @@ export default function OrderForm({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
+            className="w-full text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#d1d5db] focus:border-[#9ca3af]"
+          />
+        </label>
+        <label className="text-sm text-[#374151]">
+          <span className="block mb-1.5 text-[#374151]">Phone number (optional)</span>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(formatPhone(e.target.value))}
+            placeholder="(555) 123-4567"
             className="w-full text-sm px-3 py-2.5 rounded-lg border border-[#d1d5db] bg-white text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#d1d5db] focus:border-[#9ca3af]"
           />
         </label>

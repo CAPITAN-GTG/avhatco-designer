@@ -12,6 +12,7 @@ export type SendOrderEmailsInput = {
   quantity?: number;
   totalPrice?: string;
   note?: string;
+  phone?: string;
   /** Number of design locations (front + side). When >= 2, price is doubled. */
   locationsCount?: number;
   frontImageDataUrl?: string;
@@ -65,6 +66,8 @@ export async function sendOrderEmails(
     const quantityDiscountNote = " (Per-unit rate by quantity.)";
     const quantityDiscountNoteHtml =
       '<p style="margin:0.25em 0 0;font-size:12px;color:#6b7280;">Per-unit rate by quantity.</p>';
+
+    const trimmedPhone = input.phone?.trim();
 
     // Single decoration block: either embroidery OR leather (never both)
     const decorationText =
@@ -151,6 +154,7 @@ export async function sendOrderEmails(
     ].filter(Boolean);
     const businessTextSections = [
       `Customer: ${email}`,
+      trimmedPhone ? `Phone: ${trimmedPhone}` : "",
       `Product: ${input.productTitle}`,
       priceText,
       decorationText,
@@ -219,6 +223,7 @@ export async function sendOrderEmails(
         <p style="${emailStyles.label}">Customer</p>
         <p style="${emailStyles.value}">${email}</p>
       </section>
+      ${trimmedPhone ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Phone</p><p style="${emailStyles.value}">${trimmedPhone}</p></section>` : ""}
       <section style="${emailStyles.section}">
         <p style="${emailStyles.label}">Product</p>
         <p style="${emailStyles.value}">${input.productTitle}</p>

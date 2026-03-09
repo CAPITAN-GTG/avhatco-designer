@@ -150,7 +150,7 @@ export async function sendOrderEmails(
       priceText,
       decorationText,
       noteText,
-      "We will process your request shortly.",
+      "Custom orders typically take 7–14 business days to produce and ship. We’ll follow up by email with proofs and next steps.",
     ].filter(Boolean);
     const businessTextSections = [
       `Customer: ${email}`,
@@ -199,7 +199,10 @@ export async function sendOrderEmails(
       ${input.productPrice ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Pricing</p><p style="${emailStyles.value}">Unit price: ${input.productPrice}<br/>Quantity: ${qty}<br/>Setup fee: $35${input.totalPrice ? `<br/><strong>Total: ${input.totalPrice}</strong>` : ""}${priceReasonHtml}</p></section>` : ""}
       ${decorationInline ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Decoration</p><p style="${emailStyles.value}">${decorationInline}</p></section>` : ""}
       ${input.note?.trim() ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Note</p><p style="${emailStyles.value}">${input.note.trim()}</p></section>` : ""}
-      <p style="margin:20px 0 0;font-size:14px;color:#4b5563;">We will process your request shortly.</p>
+      <section style="${emailStyles.section}">
+        <p style="${emailStyles.label}">Timeline</p>
+        <p style="${emailStyles.value}">Custom orders typically take <strong>7–14 business days</strong> to produce and ship. We’ll email you with proofs and next steps.</p>
+      </section>
     </div>
     <div style="${emailStyles.footer}">AVhatco · Custom hat request</div>
   </div>

@@ -1,8 +1,16 @@
+"use client";
 
-
-import { useState } from "react";
-import { sendOrderEmails } from "../actions/sendOrderEmails";
+import { useEffect, useState } from "react";
+import { toast } from "react-toastify";
+import { sendOrderEmailsAfterPayment } from "../actions/sendOrderEmails";
+import type { SendOrderEmailsInput } from "../actions/sendOrderEmails";
+import {
+  getUnitPriceForQuantity,
+  MIN_QUANTITY,
+  SETUP_FEE,
+} from "@/lib/pricing";
 import type { ShopifyProduct } from "../lib/shopify";
+import { PAID_ORDER_PENDING_KEY, StripeCheckoutModal } from "./StripeCheckout";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,23 +20,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 type DecorationType = "embroidery" | "leather";
-
-const SETUP_FEE = 35;
-const MIN_QUANTITY = 12;
-
-/** Quantity tiers: [min quantity, price per unit]. Order descending by min qty so we can find tier by qty >= min. */
-const QUANTITY_TIERS: [number, number][] = [
-  [144, 14],
-  [96, 15],
-  [48, 16],
-  [24, 18],
-  [12, 20],
-];
-
-function getUnitPriceForQuantity(qty: number): number {
-  const tier = QUANTITY_TIERS.find(([min]) => qty >= min);
-  return tier ? tier[1] : QUANTITY_TIERS[QUANTITY_TIERS.length - 1]![1];
-}
 
 const PATCH_SHAPES: { value: string; label: string; image: string }[] = [
   { value: "circle", label: "Circle", image: "/circle.png" },
@@ -115,8 +106,51 @@ export default function OrderForm({
   const [embroideryPreference, setEmbroideryPreference] = useState<"yes" | "no">("no");
   const [leatherOutline, setLeatherOutline] = useState<string | null>(null);
   const [leatherColor, setLeatherColor] = useState<string | null>(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [orderPayload, setOrderPayload] = useState<SendOrderEmailsInput | null>(null);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const pi = url.searchParams.get("payment_intent");
+    const rs = url.searchParams.get("redirect_status");
+    if (!pi || rs !== "succeeded") return;
+    const raw = sessionStorage.getItem(PAID_ORDER_PENDING_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(PAID_ORDER_PENDING_KEY);
+    const next = new URL(window.location.href);
+    next.searchParams.delete("payment_intent");
+    next.searchParams.delete("payment_intent_client_secret");
+    next.searchParams.delete("redirect_status");
+    const clean =
+      next.pathname + (next.searchParams.toString() ? `?${next.searchParams}` : "") + next.hash;
+    window.history.replaceState({}, "", clean);
+
+    void (async () => {
+      try {
+        const pending = JSON.parse(raw) as SendOrderEmailsInput & { currencyCode: string };
+        const result = await sendOrderEmailsAfterPayment({
+          ...pending,
+          paymentIntentId: pi,
+        });
+        if (result.success) {
+          toast.success("Payment successful. Order confirmation sent.");
+          setStatus("ok");
+          setMessage("Order placed. Check your inbox and the business inbox.");
+        } else {
+          toast.error(result.error);
+          setStatus("error");
+          setMessage(result.error);
+        }
+      } catch {
+        toast.error("Could not complete your order after payment. Please contact support.");
+        setStatus("error");
+        setMessage("Could not send order after payment. Please contact support.");
+      }
+    })();
+  }, []);
+
+  async function handlePayAndOrder(e: React.FormEvent) {
     e.preventDefault();
     const product = products.find((p) => p.id === productId);
     if (!product) {
@@ -139,7 +173,7 @@ export default function OrderForm({
       quantity === "" || quantity === null || Number(quantity) === 0 || Number.isNaN(Number(quantity))
         ? MIN_QUANTITY
         : Math.max(MIN_QUANTITY, Math.floor(Number(quantity)));
-    setStatus("sending");
+    setStatus("idle");
     setMessage("");
     const { currencyCode } = product.priceRange.minVariantPrice;
     const unitPrice = getUnitPriceForQuantity(qty);
@@ -148,18 +182,20 @@ export default function OrderForm({
     const total = subtotal + SETUP_FEE;
     const priceStr = `${currencyCode} ${unitPrice.toFixed(2)}`;
     const totalStr = `${currencyCode} ${total.toFixed(2)}`;
+    setCheckoutBusy(true);
     const previewImages: {
       front?: string;
       side?: string;
       frontDesignOnly?: string;
       sideDesignOnly?: string;
     } = (await getPreviewImages?.().catch(() => ({}))) ?? {};
+    setCheckoutBusy(false);
     if (!previewImages.front && !previewImages.side) {
       setStatus("error");
       setMessage("Please upload at least one design image (front or side)");
       return;
     }
-    const result = await sendOrderEmails({
+    setOrderPayload({
       customerEmail: email.trim(),
       phone: phoneDigits ? formatPhone(phone) : undefined,
       productId: product.id,
@@ -181,13 +217,7 @@ export default function OrderForm({
       frontDesignOnlyDataUrl: previewImages?.frontDesignOnly,
       sideDesignOnlyDataUrl: previewImages?.sideDesignOnly,
     });
-    if (result.success) {
-      setStatus("ok");
-      setMessage("Emails sent. Check your inbox and the business inbox.");
-    } else {
-      setStatus("error");
-      setMessage(result.error);
-    }
+    setCheckoutOpen(true);
   }
 
   if (products.length === 0) return null;
@@ -213,9 +243,9 @@ export default function OrderForm({
         Order details
       </h2>
       <p className="text-xs sm:text-sm text-[#4b5563] mt-1 mb-5">
-        Pick a product and send your request to the business inbox.
+        Pick a product, then pay securely. We email your order only after payment succeeds.
       </p>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 w-full">
+      <form onSubmit={handlePayAndOrder} className="flex flex-col gap-4 w-full">
         <label className="text-sm text-[#374151]">
           <span className="block mb-1.5 text-[#374151]">Your email</span>
           <input
@@ -540,12 +570,28 @@ export default function OrderForm({
         </label>
         <button
           type="submit"
-          disabled={status === "sending"}
+          disabled={checkoutBusy}
           className="text-sm px-4 py-2.5 rounded-lg bg-[#111827] text-white hover:bg-[#1f2937] disabled:opacity-50 w-full"
         >
-          {status === "sending" ? "Sending…" : "Submit"}
+          {checkoutBusy ? "Preparing…" : "Pay & place order"}
         </button>
       </form>
+      <StripeCheckoutModal
+        open={checkoutOpen}
+        onOpenChange={(o) => {
+          setCheckoutOpen(o);
+          if (!o) setOrderPayload(null);
+        }}
+        quantity={quantity}
+        locations={locations}
+        currencyCode={currencyCode}
+        orderPayload={orderPayload}
+        onOrderComplete={() => {
+          toast.success("Payment successful. Order confirmation sent.");
+          setStatus("ok");
+          setMessage("Order placed. Check your inbox and the business inbox.");
+        }}
+      />
       {status === "ok" && (
         <p className="text-sm text-emerald-700 mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
           {message}

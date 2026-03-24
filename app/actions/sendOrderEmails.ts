@@ -2,6 +2,7 @@
 
 import fs from "fs";
 import path from "path";
+import { assertPaidOrderMatchesPaymentIntent } from "@/lib/stripeVerify";
 import { sendMail, type EmailAttachment } from "../lib/email";
 
 export type SendOrderEmailsInput = {
@@ -36,7 +37,7 @@ function dataUrlToBuffer(dataUrl: string): Buffer | null {
   }
 }
 
-export async function sendOrderEmails(
+async function deliverOrderEmails(
   input: SendOrderEmailsInput
 ): Promise<{ success: true } | { success: false; error: string }> {
   const email = input.customerEmail?.trim();
@@ -264,4 +265,19 @@ export async function sendOrderEmails(
     const message = e instanceof Error ? e.message : "Failed to send emails";
     return { success: false, error: message };
   }
+}
+
+export async function sendOrderEmailsAfterPayment(
+  input: SendOrderEmailsInput & { paymentIntentId: string; currencyCode: string }
+): Promise<{ success: true } | { success: false; error: string }> {
+  const verified = await assertPaidOrderMatchesPaymentIntent(input.paymentIntentId, {
+    quantity: input.quantity,
+    locationsCount: input.locationsCount,
+    currencyCode: input.currencyCode,
+  });
+  if (!verified.ok) {
+    return { success: false, error: verified.error };
+  }
+  const { paymentIntentId: _pid, currencyCode: _cc, ...emailInput } = input;
+  return deliverOrderEmails(emailInput);
 }

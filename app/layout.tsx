@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { ToastProvider } from "./components/ToastProvider";
 import "./globals.css";
 
 const poppins = localFont({
@@ -114,6 +115,7 @@ export default function RootLayout({
         className={`${poppins.variable} ${helvetica.variable} antialiased`}
       >
         {children}
+        <ToastProvider />
       </body>
     </html>
   );

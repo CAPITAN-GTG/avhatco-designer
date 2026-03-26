@@ -139,6 +139,7 @@ const ImageOverlaySection = forwardRef<
     decorationType?: DecorationType;
     leatherPatchImageSrc?: string | null;
     leatherOutline?: string | null;
+    leatherColor?: string | null;
     /** User-uploaded silhouette / shape for die-cut outline (data URL). */
     dieCutShapeUrl?: string | null;
   }
@@ -149,6 +150,7 @@ const ImageOverlaySection = forwardRef<
     decorationType = "embroidery",
     leatherPatchImageSrc = null,
     leatherOutline = null,
+    leatherColor = null,
     dieCutShapeUrl = null,
   },
   ref
@@ -581,6 +583,7 @@ const ImageOverlaySection = forwardRef<
           onFile={handleFile("front")}
           onOverlayProcessed={setOverlayFront}
           decorationType={decorationType}
+          leatherColor={leatherColor}
           slotActions={overlayFront ? frontActions : undefined}
           soloFullWidth={decorationType === "leather"}
           largerPreviewMobileOnly={decorationType === "leather"}
@@ -602,6 +605,7 @@ const ImageOverlaySection = forwardRef<
             onFile={handleFile("side")}
             onOverlayProcessed={setOverlaySide}
             decorationType={decorationType}
+            leatherColor={leatherColor}
             slotActions={overlaySide ? sideActions : undefined}
           />
         )}
@@ -649,6 +653,7 @@ const ImageOverlaySection = forwardRef<
           onClear={() => {}}
           onFile={() => {}}
           decorationType={decorationType}
+          leatherColor={leatherColor}
           exportCaptureMode
           exportCaptureRef={exportFrontStageRef}
         />
@@ -690,6 +695,7 @@ const ImageOverlaySection = forwardRef<
           onClear={() => {}}
           onFile={() => {}}
           decorationType={decorationType}
+          leatherColor={leatherColor}
           exportCaptureMode
           exportCaptureRef={exportFrontScaleStageRef}
         />
@@ -709,6 +715,7 @@ const ImageOverlaySection = forwardRef<
             onClear={() => {}}
             onFile={() => {}}
             decorationType={decorationType}
+            leatherColor={leatherColor}
             exportCaptureMode
             exportCaptureRef={exportSideStageRef}
           />

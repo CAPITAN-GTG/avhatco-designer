@@ -313,6 +313,7 @@ export default function DesignerCard({
           decorationType={decorationType}
           leatherPatchImageSrc={leatherPatchImageSrc}
           leatherOutline={leatherOutline}
+          leatherColor={leatherColor}
           dieCutShapeUrl={dieCutShapeUrl}
         />
       </div>

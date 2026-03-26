@@ -19,6 +19,7 @@ import {
   ImageIcon,
 } from "lucide-react";
 import type { DecorationType } from "@/lib/decoration";
+import { dieCutMaskFillStyle } from "@/lib/decoration";
 import type { NormalizedPosition } from "./overlayConstants";
 import {
   ARTWORK_FILE_HINT,
@@ -113,11 +114,13 @@ function DieCutShapePreview({
   patchUnderlayUrl,
   dieCutFrac,
   applyOverlayMask,
+  leatherColor,
 }: {
   src: string;
   patchUnderlayUrl: string | null;
   dieCutFrac: number;
   applyOverlayMask: boolean;
+  leatherColor?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -175,9 +178,14 @@ function DieCutShapePreview({
     overlay.style.setProperty("mask-size", "100% 100%");
     overlay.style.setProperty("-webkit-mask-mode", "alpha");
     overlay.style.setProperty("mask-mode", "alpha");
+    const fill = dieCutMaskFillStyle(leatherColor);
+    overlay.style.backgroundColor = fill.backgroundColor;
+    overlay.style.backgroundImage = fill.backgroundImage ?? "none";
+    overlay.style.backgroundRepeat = "no-repeat";
+    overlay.style.backgroundSize = "cover";
     /* overlay: stronger contrast so texture/detail reads through the tint */
     overlay.style.mixBlendMode = patchUnderlayUrl ? "overlay" : "normal";
-  }, [src, patchUnderlayUrl]);
+  }, [src, patchUnderlayUrl, leatherColor]);
 
   useLayoutEffect(() => {
     updateOverlayRect();
@@ -245,6 +253,7 @@ export function OverlaySlot({
   onFile,
   onOverlayProcessed,
   decorationType = "embroidery",
+  leatherColor,
   /** Undo/redo/copy — bottom bar, right-aligned. */
   slotActions,
   /** Single full-width column (e.g. leatherette front-only): taller preview on larger screens. */
@@ -276,6 +285,7 @@ export function OverlaySlot({
   onFile: (file: File) => void;
   onOverlayProcessed?: (dataUrl: string) => void;
   decorationType?: DecorationType;
+  leatherColor?: string | null;
   slotActions?: React.ReactNode;
   soloFullWidth?: boolean;
   largerPreviewMobileOnly?: boolean;
@@ -778,6 +788,7 @@ export function OverlaySlot({
                     patchUnderlayUrl={patchUnderlayUrl ?? null}
                     dieCutFrac={dieCutFrac}
                     applyOverlayMask={shouldApplySubmittedDieCutMask}
+                    leatherColor={leatherColor}
                   />
                 </div>
               </div>
@@ -812,6 +823,7 @@ export function OverlaySlot({
               patchUnderlayUrl={patchUnderlayUrl ?? null}
               dieCutFrac={dieCutFrac}
               applyOverlayMask={shouldApplySubmittedDieCutMask}
+              leatherColor={leatherColor}
             />
           </div>
         )}
@@ -1299,6 +1311,7 @@ export function OverlaySlot({
                             patchUnderlayUrl={patchUnderlayUrl ?? null}
                             dieCutFrac={fullscreenDieCutFrac}
                             applyOverlayMask={shouldApplySubmittedDieCutMask}
+                            leatherColor={leatherColor}
                           />
                         </div>
                       </div>
@@ -1333,6 +1346,7 @@ export function OverlaySlot({
                       patchUnderlayUrl={patchUnderlayUrl ?? null}
                       dieCutFrac={fullscreenDieCutFrac}
                       applyOverlayMask={shouldApplySubmittedDieCutMask}
+                      leatherColor={leatherColor}
                     />
                   </div>
                 )}

@@ -44,6 +44,38 @@ export const LEATHER_COLORS: { value: string; label: string; image: string }[] =
   { value: "Holographic Leatherette", label: "Holographic Leatherette", image: "/holographic_leatherette.jpeg" },
 ];
 
+type DieCutMaskFillStyle = {
+  backgroundColor: string;
+  backgroundImage?: string;
+};
+
+const HOLOGRAPHIC_GRADIENT =
+  "linear-gradient(120deg, #ced9ed 0%, #cfc7fa 25%, #e2c6ee 50%, #efc8dd 75%, #d7e9db 100%)";
+
+/**
+ * Fill treatment for die-cut mask overlays so material color previews/export stay consistent.
+ */
+export function dieCutMaskFillStyle(color: string | null | undefined): DieCutMaskFillStyle {
+  const resolved = (color ?? DEFAULT_LEATHER_COLOR).trim().toLowerCase();
+  switch (resolved) {
+    case "rawhide":
+      return { backgroundColor: "#A38A68" };
+    case "aluminum gold":
+      return { backgroundColor: "#D4AF37" };
+    case "aluminum silver":
+      return { backgroundColor: "#A9ACB6" };
+    case "rustic gold":
+      return { backgroundColor: "#BF9D3E" };
+    case "holographic leatherette":
+      return {
+        backgroundColor: "rgba(128, 128, 128, 0.5)",
+        backgroundImage: `linear-gradient(rgba(128, 128, 128, 0.5), rgba(128, 128, 128, 0.5)), ${HOLOGRAPHIC_GRADIENT}`,
+      };
+    default:
+      return { backgroundColor: "#A38A68" };
+  }
+}
+
 /**
  * Public filenames use `rectanble` for rectangle (legacy spelling) and `custom` for die cut.
  */

@@ -113,16 +113,15 @@ export default function DesignerCard({
     });
   }, []);
 
-  const leatherPatchImageSrc = useMemo(
-    () =>
-      decorationType === "leather"
-        ? leatherPatchTextureSrc(
-            leatherOutline ?? DEFAULT_LEATHER_OUTLINE,
-            leatherColor
-          )
-        : null,
-    [decorationType, leatherOutline, leatherColor]
-  );
+  const leatherPatchImageSrc = useMemo(() => {
+    if (decorationType !== "leather") return null;
+    const outline = leatherOutline ?? DEFAULT_LEATHER_OUTLINE;
+    // User's die-cut file replaces the generic custom-*.PNG layer entirely (no separate stock silhouette).
+    if (outline === "die cut" && dieCutShapeUrl) {
+      return null;
+    }
+    return leatherPatchTextureSrc(outline, leatherColor);
+  }, [decorationType, leatherOutline, leatherColor, dieCutShapeUrl]);
 
   const handleDecorationTypeChange = useCallback((next: DecorationType) => {
     setDecorationType(next);

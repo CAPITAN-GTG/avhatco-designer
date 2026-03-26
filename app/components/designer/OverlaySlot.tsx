@@ -416,7 +416,10 @@ export function OverlaySlot({
             <img
               src={patchDieCutShapeUrl}
               alt=""
-              className="w-auto h-auto object-contain mix-blend-multiply"
+              className={
+                "w-auto h-auto object-contain " +
+                (patchUnderlayUrl ? "mix-blend-multiply" : "")
+              }
               style={{
                 maxWidth: `${dieCutFrac * 100}%`,
                 maxHeight: `${dieCutFrac * 100}%`,
@@ -758,7 +761,10 @@ export function OverlaySlot({
                 <img
                   src={patchDieCutShapeUrl}
                   alt=""
-                  className="w-auto h-auto object-contain mix-blend-multiply"
+                  className={
+                    "w-auto h-auto object-contain " +
+                    (patchUnderlayUrl ? "mix-blend-multiply" : "")
+                  }
                   style={{
                     maxWidth: `${dieCutFrac * 100}%`,
                     maxHeight: `${dieCutFrac * 100}%`,

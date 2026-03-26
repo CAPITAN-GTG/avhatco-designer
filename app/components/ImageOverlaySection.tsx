@@ -255,31 +255,36 @@ const ImageOverlaySection = forwardRef<
         const contentW = base.w * (1 - INSET * 2);
         const contentH = base.h * (1 - INSET * 2);
 
-        if (decorationType === "leather" && leatherPatchImageSrc && overlayFront) {
-          const patchImgFull = await loadImage(leatherPatchImageSrc);
-          const patchImg = await downscaleImageForPatchExport(patchImgFull, 256);
+        if (decorationType === "leather" && overlayFront) {
           const patchBox =
             Math.min(contentW, contentH) * leatherPatchPreviewMaxFrac(leatherOutline);
           const cx = contentLeft + contentW / 2 + LEATHER_PATCH_PREVIEW_NUDGE_PX;
           const cy = contentTop + contentH / 2;
-          ctx.save();
-          ctx.globalCompositeOperation = "multiply";
-          drawOverlayContain(
-            ctx,
-            patchImg,
-            cx - patchBox / 2,
-            cy - patchBox / 2,
-            patchBox,
-            patchBox
-          );
-          ctx.restore();
+
+          if (leatherPatchImageSrc) {
+            const patchImgFull = await loadImage(leatherPatchImageSrc);
+            const patchImg = await downscaleImageForPatchExport(patchImgFull, 256);
+            ctx.save();
+            ctx.globalCompositeOperation = "multiply";
+            drawOverlayContain(
+              ctx,
+              patchImg,
+              cx - patchBox / 2,
+              cy - patchBox / 2,
+              patchBox,
+              patchBox
+            );
+            ctx.restore();
+          }
 
           if (leatherOutline === "die cut" && dieCutShapeUrl) {
             const dieFull = await loadImage(dieCutShapeUrl);
             const dieImg = await downscaleImageForPatchExport(dieFull, 256);
             const dieCutBox = patchBox * dieCutScale;
             ctx.save();
-            ctx.globalCompositeOperation = "multiply";
+            ctx.globalCompositeOperation = leatherPatchImageSrc
+              ? "multiply"
+              : "source-over";
             drawOverlayContain(
               ctx,
               dieImg,

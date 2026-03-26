@@ -95,18 +95,23 @@ function LeatherOutlinePicker({
   mobile,
   leatherOutlineResolved,
   leatherColorResolved,
+  dieCutShapeUrl,
   onLeatherOutlineChange,
 }: {
   mobile: boolean;
   leatherOutlineResolved: string;
   leatherColorResolved: string;
+  /** User-uploaded die-cut outline image; used as the thumbnail when die cut is selected. */
+  dieCutShapeUrl?: string | null;
   onLeatherOutlineChange: (value: string | null) => void;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const shape = PATCH_SHAPES.find((s) => s.value === leatherOutlineResolved);
   const thumb =
     shape &&
-    (leatherPatchTextureSrc(leatherOutlineResolved, leatherColorResolved) ?? shape.image);
+    (leatherOutlineResolved === "die cut" && dieCutShapeUrl
+      ? dieCutShapeUrl
+      : (leatherPatchTextureSrc(leatherOutlineResolved, leatherColorResolved) ?? shape.image));
 
   const triggerInner =
     shape && thumb ? (
@@ -157,7 +162,9 @@ function LeatherOutlinePicker({
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {PATCH_SHAPES.map((s) => {
               const t =
-                leatherPatchTextureSrc(s.value, leatherColorResolved) ?? s.image;
+                s.value === "die cut" && dieCutShapeUrl
+                  ? dieCutShapeUrl
+                  : (leatherPatchTextureSrc(s.value, leatherColorResolved) ?? s.image);
               return (
                 <button
                   key={s.value}
@@ -216,7 +223,9 @@ function LeatherOutlinePicker({
       >
         {PATCH_SHAPES.map((s) => {
           const t =
-            leatherPatchTextureSrc(s.value, leatherColorResolved) ?? s.image;
+            s.value === "die cut" && dieCutShapeUrl
+              ? dieCutShapeUrl
+              : (leatherPatchTextureSrc(s.value, leatherColorResolved) ?? s.image);
           return (
             <DropdownMenuItem
               key={s.value}
@@ -719,6 +728,7 @@ export default function OrderForm({
                       mobile={leatherPickerMobile}
                       leatherOutlineResolved={leatherOutlineResolved}
                       leatherColorResolved={leatherColorResolved}
+                      dieCutShapeUrl={dieCutShapeUrl}
                       onLeatherOutlineChange={onLeatherOutlineChange}
                     />
                   </div>

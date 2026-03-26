@@ -745,9 +745,13 @@ export default function OrderForm({
                       <p className="mb-1.5 px-3 text-xs font-medium text-zinc-300">
                         Die-cut patch shape
                       </p>
-                      <p className="mb-3 px-3 text-[11px] leading-snug text-zinc-500">
+                      <p className="mb-2 px-3 text-[11px] leading-snug text-zinc-500">
                         Upload the image that defines the cut outline. It appears behind your artwork on
                         the preview (leatherette color still applies).
+                      </p>
+                      <p className="mb-3 px-3 text-[11px] leading-snug font-medium text-red-400">
+                        Use a PNG with no background—transparent areas show as leather brown in the
+                        preview; do not submit a white or solid-color backdrop behind the shape.
                       </p>
                       <div className="px-3">
                         <DropZone

@@ -15,7 +15,7 @@ import {
   type DecorationType,
   leatherPatchPreviewMaxFrac,
 } from "@/lib/decoration";
-import type { BaseImages } from "./designer/overlayConstants";
+import type { BaseImages, NormalizedPosition } from "./designer/overlayConstants";
 import {
   CENTER_POSITION,
   DIE_CUT_SCALE_DEFAULT,
@@ -115,6 +115,12 @@ const ImageOverlaySection = forwardRef<
   const [overlayFront, setOverlayFront] = useState<string | null>(null);
   const [overlaySide, setOverlaySide] = useState<string | null>(null);
   const [dieCutScale, setDieCutScale] = useState(DIE_CUT_SCALE_DEFAULT);
+  const [patchPosition, setPatchPosition] =
+    useState<NormalizedPosition>(CENTER_POSITION);
+  const patchPositionRef = useRef(patchPosition);
+  useEffect(() => {
+    patchPositionRef.current = patchPosition;
+  }, [patchPosition]);
 
   const frontScaleStartRef = useRef<ReturnType<typeof cloneSlot> | null>(null);
   const sideScaleStartRef = useRef<ReturnType<typeof cloneSlot> | null>(null);
@@ -258,8 +264,13 @@ const ImageOverlaySection = forwardRef<
         if (decorationType === "leather" && overlayFront) {
           const patchBox =
             Math.min(contentW, contentH) * leatherPatchPreviewMaxFrac(leatherOutline);
-          const cx = contentLeft + contentW / 2 + LEATHER_PATCH_PREVIEW_NUDGE_PX;
-          const cy = contentTop + contentH / 2;
+          const pp = patchPositionRef.current;
+          const cx =
+            contentLeft +
+            contentW / 2 +
+            LEATHER_PATCH_PREVIEW_NUDGE_PX +
+            (pp.x - 0.5) * contentW;
+          const cy = contentTop + contentH / 2 + (pp.y - 0.5) * contentH;
 
           if (leatherPatchImageSrc) {
             const patchImgFull = await loadImage(leatherPatchImageSrc);
@@ -379,6 +390,7 @@ const ImageOverlaySection = forwardRef<
     leatherOutline,
     dieCutShapeUrl,
     dieCutScale,
+    patchPosition,
     baseImages?.front ?? FALLBACK_BASE_IMAGES.front,
     baseImages?.side ?? FALLBACK_BASE_IMAGES.side,
   ]);
@@ -558,8 +570,9 @@ const ImageOverlaySection = forwardRef<
       </div>
 
       <p className="text-[10px] sm:text-[11px] text-zinc-500 mb-3 sm:mb-4 leading-snug max-w-3xl">
-        Tip: click the preview with artwork, then use arrow keys to nudge (Shift = finer). Undo/redo
-        apply per view.
+        Tip: click the preview with artwork, then use arrow keys to nudge (Shift = finer). With
+        leatherette, use the brown Patch arrows (top right) to move the texture and submitted
+        die-cut shape together; artwork uses the diamond pad on the left. Undo/redo apply per view.
       </p>
 
       <div
@@ -575,6 +588,14 @@ const ImageOverlaySection = forwardRef<
           overlayUrl={overlayFront}
           patchUnderlayUrl={
             decorationType === "leather" ? leatherPatchImageSrc : null
+          }
+          patchPosition={
+            decorationType === "leather" ? patchPosition : undefined
+          }
+          onPatchPositionCommit={
+            decorationType === "leather"
+              ? (pos) => setPatchPosition(pos)
+              : undefined
           }
           patchDieCutShapeUrl={
             decorationType === "leather" && leatherOutline === "die cut"

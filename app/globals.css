@@ -73,3 +73,42 @@ h4 {
 .leather-dropdown-content[data-state="open"] {
   animation: leather-dropdown-fade-in 0.3s cubic-bezier(0.32, 0.72, 0, 1);
 }
+
+/* Die-cut preview: sized by img; centered by parent flex (same idea as patch underlay img) */
+.preview-container {
+  position: relative;
+  display: block;
+  line-height: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.diecut-img {
+  display: block;
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Silhouette only: masked leather fill is drawn on .leather-overlay; hiding the bitmap removes PNG fringe / box edges. */
+.diecut-img-layout-only {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.leather-overlay {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  will-change: opacity;
+  visibility: hidden;
+  background: linear-gradient(135deg, #7b4f2a, #a56f48);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25);
+  /* mask-* set in JS so blob URLs apply after layout */
+}

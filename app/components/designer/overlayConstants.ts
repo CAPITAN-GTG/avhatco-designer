@@ -28,6 +28,9 @@ export const OVERLAY_UI_MAX_FRAC = 0.45;
 /** Shift leatherette patch outline right in the main preview, fullscreen, and exports (keep in sync). */
 export const LEATHER_PATCH_PREVIEW_NUDGE_PX = 5;
 
+/** Expand masked leather fill past computed bitmap bounds to hide subpixel gaps at die-cut edges. */
+export const DIE_CUT_LEATHER_OVERLAY_BLEED_PX = 2;
+
 /** @deprecated Use LEATHER_PATCH_PREVIEW_NUDGE_PX — fullscreen uses the same nudge as inline preview. */
 export const LEATHER_PATCH_FULLSCREEN_NUDGE_PX = LEATHER_PATCH_PREVIEW_NUDGE_PX;
 

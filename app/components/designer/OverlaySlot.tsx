@@ -13,6 +13,7 @@ import type { NormalizedPosition } from "./overlayConstants";
 import {
   ARTWORK_FILE_HINT,
   CENTER_POSITION,
+  DIE_CUT_SCALE_DEFAULT,
   NUDGE_STEP,
   NUDGE_STEP_FINE,
   OVERLAY_SCALE_MAX,
@@ -77,6 +78,13 @@ export function OverlaySlot({
   baseSrc,
   overlayUrl,
   patchUnderlayUrl,
+  /** Die-cut custom shape (shown between leather texture and artwork). */
+  patchDieCutShapeUrl,
+  /** Scales die-cut layer relative to patch outline (see {@link DIE_CUT_SCALE_DEFAULT}). */
+  dieCutScale,
+  onDieCutScaleLive,
+  onDieCutScalePointerDown,
+  onDieCutScalePointerUp,
   patchMaxFrac,
   overlayPosition,
   overlayScale,
@@ -97,6 +105,11 @@ export function OverlaySlot({
   baseSrc: string;
   overlayUrl: string | null;
   patchUnderlayUrl: string | null;
+  patchDieCutShapeUrl?: string | null;
+  dieCutScale?: number;
+  onDieCutScaleLive?: (scale: number) => void;
+  onDieCutScalePointerDown?: () => void;
+  onDieCutScalePointerUp?: () => void;
   patchMaxFrac: number;
   overlayPosition: NormalizedPosition;
   overlayScale: number;
@@ -111,6 +124,12 @@ export function OverlaySlot({
   largerPreviewMobileOnly?: boolean;
 }) {
   const label = slot === "front" ? "Front" : "Side";
+  const showDieCutSlider = Boolean(
+    patchDieCutShapeUrl && onDieCutScaleLive && typeof dieCutScale === "number"
+  );
+  const showArtworkSlider = Boolean(overlayUrl);
+  const twoLeftSliders = showDieCutSlider && showArtworkSlider;
+  const dieCutFrac = patchMaxFrac * (dieCutScale ?? DIE_CUT_SCALE_DEFAULT);
   const [position, setPosition] = useState<NormalizedPosition>(() => overlayPosition);
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ clientX: 0, clientY: 0, startX: 0, startY: 0 });
@@ -146,7 +165,9 @@ export function OverlaySlot({
   const innerPaddingClass =
     slot === "side"
       ? "pl-[calc(5rem-2px)] sm:pl-[calc(7rem-2px)] pr-[calc(2rem+2px)] sm:pr-[calc(3rem+2px)] py-12 sm:py-16"
-      : "px-12 sm:px-16 py-12 sm:py-16";
+      : twoLeftSliders
+        ? "pl-[calc(5.5rem+2px)] sm:pl-[calc(7rem+2px)] pr-12 sm:pr-16 py-12 sm:py-16"
+        : "px-12 sm:px-16 py-12 sm:py-16";
 
   const clampToContent = useCallback(
     (centerX: number, centerY: number) => {
@@ -351,7 +372,7 @@ export function OverlaySlot({
         tabIndex={overlayUrl ? 0 : -1}
         onKeyDown={overlayUrl ? handleKeyDown : undefined}
         className={
-          (overlayUrl
+          (overlayUrl || showDieCutSlider
             ? "relative w-full aspect-4/3 bg-white rounded-lg border border-[#e5e7eb] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-[#111827]/20 focus-visible:ring-offset-1 "
             : "relative w-full aspect-4/3 bg-white rounded-lg border border-[#e5e7eb] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden ") +
           previewMaxHeightClass
@@ -384,6 +405,86 @@ export function OverlaySlot({
                 maxHeight: `${patchMaxFrac * 100}%`,
               }}
             />
+          </div>
+        )}
+        {patchDieCutShapeUrl && (
+          <div
+            className="absolute inset-0 z-[6] flex items-center justify-center pointer-events-none p-2 sm:p-3"
+            style={{ transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)` }}
+            aria-hidden
+          >
+            <img
+              src={patchDieCutShapeUrl}
+              alt=""
+              className="w-auto h-auto object-contain mix-blend-multiply"
+              style={{
+                maxWidth: `${dieCutFrac * 100}%`,
+                maxHeight: `${dieCutFrac * 100}%`,
+              }}
+            />
+          </div>
+        )}
+        {showDieCutSlider && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-10 flex flex-col items-center justify-center z-[15] bg-gradient-to-b from-white to-[#fafafa] border-r border-[#e5e7eb] rounded-l-lg"
+            style={{ paddingLeft: "2px" }}
+          >
+            <span className="text-[7px] font-semibold uppercase tracking-[0.1em] text-[#6b7280] mb-1 mt-2.5 text-center leading-tight px-0.5">
+              Die cut
+            </span>
+            <div className="flex-1 flex items-center justify-center min-h-0 overflow-visible">
+              <input
+                type="range"
+                min={OVERLAY_SCALE_MIN}
+                max={OVERLAY_SCALE_MAX}
+                step={0.05}
+                value={dieCutScale}
+                onChange={(e) => onDieCutScaleLive?.(parseFloat(e.target.value))}
+                onPointerDown={onDieCutScalePointerDown}
+                onPointerUp={onDieCutScalePointerUp}
+                onPointerCancel={onDieCutScalePointerUp}
+                className="appearance-none bg-transparent cursor-pointer touch-none [&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-[#e5e7eb] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#111827] [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:mt-[calc(-0.5rem+4px)] [&::-moz-range-track]:h-2 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-[#e5e7eb] [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#111827] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab"
+                style={{
+                  transform: "rotate(-90deg)",
+                  width: "120px",
+                  height: "8px",
+                }}
+                aria-label="Die-cut shape size"
+              />
+            </div>
+          </div>
+        )}
+        {showArtworkSlider && (
+          <div
+            className={
+              "absolute top-0 bottom-0 w-10 flex flex-col items-center justify-center z-[15] bg-gradient-to-b from-white to-[#fafafa] border-r border-[#e5e7eb] " +
+              (showDieCutSlider ? "left-10" : "left-0 rounded-l-lg")
+            }
+            style={{ paddingLeft: "2px" }}
+          >
+            <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[#6b7280] mb-1 mt-2.5 whitespace-nowrap">
+              Artwork
+            </span>
+            <div className="flex-1 flex items-center justify-center min-h-0 overflow-visible">
+              <input
+                type="range"
+                min={OVERLAY_SCALE_MIN}
+                max={OVERLAY_SCALE_MAX}
+                step={0.05}
+                value={overlayScale}
+                onChange={(e) => onScaleLive(parseFloat(e.target.value))}
+                onPointerDown={onScalePointerDown}
+                onPointerUp={onScalePointerUp}
+                onPointerCancel={onScalePointerUp}
+                className="appearance-none bg-transparent cursor-pointer touch-none [&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-[#e5e7eb] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#111827] [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:mt-[calc(-0.5rem+4px)] [&::-moz-range-track]:h-2 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-[#e5e7eb] [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#111827] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab"
+                style={{
+                  transform: "rotate(-90deg)",
+                  width: "120px",
+                  height: "8px",
+                }}
+                aria-label="Artwork size"
+              />
+            </div>
           </div>
         )}
         {overlayUrl && (
@@ -420,7 +521,10 @@ export function OverlaySlot({
               </div>
             </div>
             <div
-              className="absolute top-2 left-10 z-20 inline-block p-px pointer-events-auto"
+              className={
+                "absolute top-2 z-20 inline-block p-px pointer-events-auto " +
+                (twoLeftSliders ? "left-20" : "left-10")
+              }
               role="group"
               aria-label="Move design 1 pixel; hold to repeat"
             >
@@ -560,34 +664,6 @@ export function OverlaySlot({
               </div>
               </div>
             </div>
-            <div
-              className="absolute left-0 top-0 bottom-0 w-10 flex flex-col items-center justify-center z-10 bg-gradient-to-b from-white to-[#fafafa] border-r border-[#e5e7eb] rounded-l-lg"
-              style={{ paddingLeft: "2px" }}
-            >
-              <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[#6b7280] mb-1 mt-2.5 whitespace-nowrap">
-                Size
-              </span>
-              <div className="flex-1 flex items-center justify-center min-h-0 overflow-visible">
-                <input
-                  type="range"
-                  min={OVERLAY_SCALE_MIN}
-                  max={OVERLAY_SCALE_MAX}
-                  step={0.05}
-                  value={overlayScale}
-                  onChange={(e) => onScaleLive(parseFloat(e.target.value))}
-                  onPointerDown={onScalePointerDown}
-                  onPointerUp={onScalePointerUp}
-                  onPointerCancel={onScalePointerUp}
-                  className="appearance-none bg-transparent cursor-pointer touch-none [&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-[#e5e7eb] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#111827] [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:active:cursor-grabbing [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:mt-[calc(-0.5rem+4px)] [&::-moz-range-track]:h-2 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-[#e5e7eb] [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#111827] [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-grab"
-                  style={{
-                    transform: "rotate(-90deg)",
-                    width: "120px",
-                    height: "8px",
-                  }}
-                  aria-label="Overlay size"
-                />
-              </div>
-            </div>
             <button
               type="button"
               onClick={onClear}
@@ -598,7 +674,10 @@ export function OverlaySlot({
             </button>
             {slotActions ? (
               <div
-                className="absolute bottom-0 left-10 right-0 z-10 flex flex-wrap items-center justify-end gap-1 py-1.5 px-1.5 min-h-[32px] border-t border-[#e5e7eb] bg-white/98 backdrop-blur-sm rounded-br-lg"
+                className={
+                  "absolute bottom-0 right-0 z-10 flex flex-wrap items-center justify-end gap-1 py-1.5 px-1.5 min-h-[32px] border-t border-[#e5e7eb] bg-white/98 backdrop-blur-sm rounded-br-lg " +
+                  (twoLeftSliders ? "left-20" : "left-10")
+                }
                 role="toolbar"
                 aria-label={`${label} view actions`}
               >
@@ -666,6 +745,23 @@ export function OverlaySlot({
                   style={{
                     maxWidth: `${patchMaxFrac * 100}%`,
                     maxHeight: `${patchMaxFrac * 100}%`,
+                  }}
+                />
+              </div>
+            )}
+            {patchDieCutShapeUrl && (
+              <div
+                className="absolute inset-0 z-[6] flex items-center justify-center pointer-events-none p-2 sm:p-3 md:p-6 lg:p-8"
+                style={{ transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)` }}
+                aria-hidden
+              >
+                <img
+                  src={patchDieCutShapeUrl}
+                  alt=""
+                  className="w-auto h-auto object-contain mix-blend-multiply"
+                  style={{
+                    maxWidth: `${dieCutFrac * 100}%`,
+                    maxHeight: `${dieCutFrac * 100}%`,
                   }}
                 />
               </div>

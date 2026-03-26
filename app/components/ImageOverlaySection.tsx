@@ -18,6 +18,7 @@ import {
 import type { BaseImages } from "./designer/overlayConstants";
 import {
   CENTER_POSITION,
+  DIE_CUT_SCALE_DEFAULT,
   EXPORT_HEIGHT,
   EXPORT_WIDTH,
   FALLBACK_BASE_IMAGES,
@@ -47,6 +48,8 @@ export type ImageOverlaySectionHandle = {
     side?: string;
     frontDesignOnly?: string;
     sideDesignOnly?: string;
+    /** Full-resolution die-cut shape file (business email / production). */
+    dieCutShapeHighResDataUrl?: string;
   }>;
 };
 
@@ -58,6 +61,20 @@ function slotToolbarButtonClass(disabled?: boolean) {
   );
 }
 
+async function objectUrlToFullDataUrl(url: string): Promise<string | undefined> {
+  try {
+    const blob = await fetch(url).then((r) => r.blob());
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("read"));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 const ImageOverlaySection = forwardRef<
   ImageOverlaySectionHandle,
   {
@@ -66,6 +83,8 @@ const ImageOverlaySection = forwardRef<
     decorationType?: DecorationType;
     leatherPatchImageSrc?: string | null;
     leatherOutline?: string | null;
+    /** User-uploaded silhouette / shape for die-cut outline (object URL). */
+    dieCutShapeUrl?: string | null;
   }
 >(function ImageOverlaySection(
   {
@@ -74,6 +93,7 @@ const ImageOverlaySection = forwardRef<
     decorationType = "embroidery",
     leatherPatchImageSrc = null,
     leatherOutline = null,
+    dieCutShapeUrl = null,
   },
   ref
 ) {
@@ -94,6 +114,7 @@ const ImageOverlaySection = forwardRef<
 
   const [overlayFront, setOverlayFront] = useState<string | null>(null);
   const [overlaySide, setOverlaySide] = useState<string | null>(null);
+  const [dieCutScale, setDieCutScale] = useState(DIE_CUT_SCALE_DEFAULT);
 
   const frontScaleStartRef = useRef<ReturnType<typeof cloneSlot> | null>(null);
   const sideScaleStartRef = useRef<ReturnType<typeof cloneSlot> | null>(null);
@@ -159,6 +180,12 @@ const ImageOverlaySection = forwardRef<
     onLocationsChange(count);
   }, [overlayFront, overlaySide, onLocationsChange, decorationType]);
 
+  useEffect(() => {
+    if (!dieCutShapeUrl || leatherOutline !== "die cut") {
+      setDieCutScale(DIE_CUT_SCALE_DEFAULT);
+    }
+  }, [dieCutShapeUrl, leatherOutline]);
+
   const handleFile = useCallback(
     (slot: Slot) => (file: File) => setOverlay(slot, file),
     [setOverlay]
@@ -197,6 +224,7 @@ const ImageOverlaySection = forwardRef<
       side?: string;
       frontDesignOnly?: string;
       sideDesignOnly?: string;
+      dieCutShapeHighResDataUrl?: string;
     } = {};
     const INSET = 0.12;
     const SIDE_INSET_LEFT = 0.28;
@@ -245,6 +273,23 @@ const ImageOverlaySection = forwardRef<
             patchBox
           );
           ctx.restore();
+
+          if (leatherOutline === "die cut" && dieCutShapeUrl) {
+            const dieFull = await loadImage(dieCutShapeUrl);
+            const dieImg = await downscaleImageForPatchExport(dieFull, 256);
+            const dieCutBox = patchBox * dieCutScale;
+            ctx.save();
+            ctx.globalCompositeOperation = "multiply";
+            drawOverlayContain(
+              ctx,
+              dieImg,
+              cx - dieCutBox / 2,
+              cy - dieCutBox / 2,
+              dieCutBox,
+              dieCutBox
+            );
+            ctx.restore();
+          }
         }
 
         if (overlayFront) {
@@ -271,6 +316,15 @@ const ImageOverlaySection = forwardRef<
       } catch {
         // CORS or decode failure
       }
+    }
+
+    if (
+      decorationType === "leather" &&
+      leatherOutline === "die cut" &&
+      dieCutShapeUrl
+    ) {
+      const hi = await objectUrlToFullDataUrl(dieCutShapeUrl);
+      if (hi) result.dieCutShapeHighResDataUrl = hi;
     }
 
     if (decorationType !== "leather" && overlaySide) {
@@ -318,6 +372,8 @@ const ImageOverlaySection = forwardRef<
     decorationType,
     leatherPatchImageSrc,
     leatherOutline,
+    dieCutShapeUrl,
+    dieCutScale,
     baseImages?.front ?? FALLBACK_BASE_IMAGES.front,
     baseImages?.side ?? FALLBACK_BASE_IMAGES.side,
   ]);
@@ -514,6 +570,25 @@ const ImageOverlaySection = forwardRef<
           overlayUrl={overlayFront}
           patchUnderlayUrl={
             decorationType === "leather" ? leatherPatchImageSrc : null
+          }
+          patchDieCutShapeUrl={
+            decorationType === "leather" && leatherOutline === "die cut"
+              ? dieCutShapeUrl
+              : null
+          }
+          dieCutScale={
+            decorationType === "leather" &&
+            leatherOutline === "die cut" &&
+            dieCutShapeUrl
+              ? dieCutScale
+              : undefined
+          }
+          onDieCutScaleLive={
+            decorationType === "leather" &&
+            leatherOutline === "die cut" &&
+            dieCutShapeUrl
+              ? setDieCutScale
+              : undefined
           }
           patchMaxFrac={patchMaxFrac}
           overlayPosition={frontHistory.present.position}

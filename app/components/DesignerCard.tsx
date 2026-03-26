@@ -104,6 +104,14 @@ export default function DesignerCard({
     DEFAULT_LEATHER_OUTLINE
   );
   const [leatherColor, setLeatherColor] = useState<string | null>(DEFAULT_LEATHER_COLOR);
+  const [dieCutShapeUrl, setDieCutShapeUrl] = useState<string | null>(null);
+
+  const setDieCutShapeFile = useCallback((file: File | null) => {
+    setDieCutShapeUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : null;
+    });
+  }, []);
 
   const leatherPatchImageSrc = useMemo(
     () =>
@@ -121,12 +129,25 @@ export default function DesignerCard({
     if (next === "embroidery") {
       setLeatherOutline(null);
       setLeatherColor(DEFAULT_LEATHER_COLOR);
+      setDieCutShapeUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
     }
     if (next === "leather") {
       setLeatherColor((c) => c ?? DEFAULT_LEATHER_COLOR);
       setLeatherOutline((o) => o ?? DEFAULT_LEATHER_OUTLINE);
     }
   }, []);
+
+  useEffect(() => {
+    if (decorationType !== "leather" || leatherOutline !== "die cut") {
+      setDieCutShapeUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    }
+  }, [decorationType, leatherOutline]);
 
   const selectedProduct = productId
     ? (products.find((p) => p.id === productId) ?? null)
@@ -236,6 +257,7 @@ export default function DesignerCard({
           decorationType={decorationType}
           leatherPatchImageSrc={leatherPatchImageSrc}
           leatherOutline={leatherOutline}
+          dieCutShapeUrl={dieCutShapeUrl}
         />
       </div>
 
@@ -252,6 +274,8 @@ export default function DesignerCard({
             onLeatherOutlineChange={setLeatherOutline}
             leatherColor={leatherColor}
             onLeatherColorChange={setLeatherColor}
+            dieCutShapeUrl={dieCutShapeUrl}
+            onDieCutShapeFile={setDieCutShapeFile}
           />
       </div>
     </div>

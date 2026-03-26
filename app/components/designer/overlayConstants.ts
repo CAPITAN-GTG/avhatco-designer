@@ -16,6 +16,9 @@ export const OVERLAY_SCALE_MIN = 0.2;
 export const OVERLAY_SCALE_MAX = 1.2;
 export const OVERLAY_SCALE_DEFAULT = 1;
 
+/** Independent size control for the die-cut shape layer (multiplies patch outline size). */
+export const DIE_CUT_SCALE_DEFAULT = 1;
+
 /**
  * Max fraction of the preview content area for the overlay artwork (width & height caps).
  * The size slider multiplies this cap so layout size matches what you see (no separate CSS scale).

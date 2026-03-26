@@ -26,6 +26,8 @@ export type SendOrderEmailsInput = {
   embroideryPreference?: "yes" | "no";
   leatherOutline?: string;
   leatherColor?: string;
+  /** Full-resolution die-cut shape file (business email only). */
+  dieCutShapeHighResDataUrl?: string;
 };
 
 function dataUrlToBuffer(dataUrl: string): Buffer | null {
@@ -36,6 +38,13 @@ function dataUrlToBuffer(dataUrl: string): Buffer | null {
   } catch {
     return null;
   }
+}
+
+function dieCutShapeAttachmentName(dataUrl: string): string {
+  const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,/i);
+  if (!m) return "die-cut-patch-shape.bin";
+  const ext = m[1].toLowerCase() === "jpeg" ? "jpg" : m[1].toLowerCase();
+  return `die-cut-patch-shape.${ext}`;
 }
 
 async function deliverOrderEmails(
@@ -57,6 +66,16 @@ async function deliverOrderEmails(
         input.decorationType === "leather"
           ? "Please upload a front design image for your leatherette patch."
           : "Please upload at least one design image (front or side)",
+    };
+  }
+  if (
+    input.decorationType === "leather" &&
+    input.leatherOutline === "die cut" &&
+    !input.dieCutShapeHighResDataUrl
+  ) {
+    return {
+      success: false,
+      error: "Die-cut patch shape image is required for die-cut leatherette orders.",
     };
   }
 
@@ -135,6 +154,15 @@ async function deliverOrderEmails(
     if (input.sideDesignOnlyDataUrl) {
       const buf = dataUrlToBuffer(input.sideDesignOnlyDataUrl);
       if (buf) businessAttachments.push({ filename: "design-side-artwork.jpg", content: buf });
+    }
+    if (input.dieCutShapeHighResDataUrl) {
+      const buf = dataUrlToBuffer(input.dieCutShapeHighResDataUrl);
+      if (buf) {
+        businessAttachments.push({
+          filename: dieCutShapeAttachmentName(input.dieCutShapeHighResDataUrl),
+          content: buf,
+        });
+      }
     }
 
     // Inline logo for email header (from public/logo.png)

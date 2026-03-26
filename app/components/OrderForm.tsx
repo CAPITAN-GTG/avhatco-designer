@@ -28,6 +28,7 @@ import {
 } from "./ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { DropZone } from "./designer/DropZone";
 
 function formatPhone(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 10);
@@ -397,6 +398,8 @@ export default function OrderForm({
   onLeatherOutlineChange,
   leatherColor,
   onLeatherColorChange,
+  dieCutShapeUrl,
+  onDieCutShapeFile,
 }: {
   products: ShopifyProduct[];
   productId: string;
@@ -406,6 +409,7 @@ export default function OrderForm({
     side?: string;
     frontDesignOnly?: string;
     sideDesignOnly?: string;
+    dieCutShapeHighResDataUrl?: string;
   }>;
   locations?: number;
   decorationType: DecorationType;
@@ -414,6 +418,8 @@ export default function OrderForm({
   onLeatherOutlineChange: (value: string | null) => void;
   leatherColor: string | null;
   onLeatherColorChange: (value: string | null) => void;
+  dieCutShapeUrl: string | null;
+  onDieCutShapeFile: (file: File | null) => void;
 }) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -502,6 +508,7 @@ export default function OrderForm({
       side?: string;
       frontDesignOnly?: string;
       sideDesignOnly?: string;
+      dieCutShapeHighResDataUrl?: string;
     } = (await getPreviewImages?.().catch(() => ({}))) ?? {};
     setCheckoutBusy(false);
     const hasDesign =
@@ -515,6 +522,17 @@ export default function OrderForm({
           ? "Please upload a front design image for your leatherette patch."
           : "Please upload at least one design image (front or side)"
       );
+      return;
+    }
+    const resolvedOutline =
+      decorationType === "leather" ? leatherOutline ?? DEFAULT_LEATHER_OUTLINE : null;
+    if (
+      decorationType === "leather" &&
+      resolvedOutline === "die cut" &&
+      !previewImages.dieCutShapeHighResDataUrl
+    ) {
+      setStatus("error");
+      setMessage("Please upload a die-cut patch shape image (the outline your patch should follow).");
       return;
     }
     setOrderPayload({
@@ -541,6 +559,7 @@ export default function OrderForm({
       sideImageDataUrl: previewImages?.side,
       frontDesignOnlyDataUrl: previewImages?.frontDesignOnly,
       sideDesignOnlyDataUrl: previewImages?.sideDesignOnly,
+      dieCutShapeHighResDataUrl: previewImages?.dieCutShapeHighResDataUrl,
     });
     setCheckoutOpen(true);
   }
@@ -711,6 +730,36 @@ export default function OrderForm({
                       onLeatherColorChange={onLeatherColorChange}
                     />
                   </div>
+                  {leatherOutlineResolved === "die cut" && (
+                    <div className="min-w-0 border-t border-zinc-700/80 pt-4 mt-1">
+                      <p className="mb-1.5 px-3 text-xs font-medium text-zinc-300">
+                        Die-cut patch shape
+                      </p>
+                      <p className="mb-3 px-3 text-[11px] leading-snug text-zinc-500">
+                        Upload the image that defines the cut outline. It appears behind your artwork on
+                        the preview (leatherette color still applies).
+                      </p>
+                      <div className="px-3">
+                        <DropZone
+                          label={
+                            dieCutShapeUrl
+                              ? "Drop another image to replace shape"
+                              : "Drop shape image (PNG or JPG)"
+                          }
+                          onFile={(file) => onDieCutShapeFile(file)}
+                        />
+                        {dieCutShapeUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => onDieCutShapeFile(null)}
+                            className="mt-2 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 underline underline-offset-2"
+                          >
+                            Remove shape image
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </TabsContent>
             </Tabs>

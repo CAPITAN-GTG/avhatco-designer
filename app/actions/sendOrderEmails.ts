@@ -26,9 +26,24 @@ export type SendOrderEmailsInput = {
   embroideryPreference?: "yes" | "no";
   leatherOutline?: string;
   leatherColor?: string;
+  /** Stripe PaymentIntent created timestamp (unix seconds). */
+  paymentIntentCreatedUnix?: number;
   /** Full-resolution die-cut shape file (business email only). */
   dieCutShapeHighResDataUrl?: string;
 };
+
+function formatDallasDateTime(unixSeconds?: number): string | null {
+  if (!unixSeconds || !Number.isFinite(unixSeconds)) return null;
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Chicago",
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(unixSeconds * 1000));
+  } catch {
+    return null;
+  }
+}
 
 function dataUrlToBuffer(dataUrl: string): Buffer | null {
   const match = dataUrl.match(/^data:[^;]+;base64,(.+)$/i);
@@ -114,6 +129,7 @@ async function deliverOrderEmails(
       '<p style="margin:0.25em 0 0;font-size:12px;color:#6b7280;">Per-unit rate by quantity.</p>';
 
     const trimmedPhone = input.phone?.trim();
+    const orderTimeDallas = formatDallasDateTime(input.paymentIntentCreatedUnix);
 
     // Single decoration block: either embroidery OR leatherette (not DTF)
     const decorationText =
@@ -202,6 +218,7 @@ async function deliverOrderEmails(
     // Plain-text body: ordered sections for client and business (no attachment list in body)
     const customerTextSections = [
       `Product: ${input.productTitle}`,
+      orderTimeDallas ? `Order time (Dallas): ${orderTimeDallas}` : "",
       priceText,
       decorationText,
       noteText,
@@ -211,6 +228,7 @@ async function deliverOrderEmails(
       `Customer: ${email}`,
       trimmedPhone ? `Phone: ${trimmedPhone}` : "",
       `Product: ${input.productTitle}`,
+      orderTimeDallas ? `Order time (Dallas): ${orderTimeDallas}` : "",
       priceText,
       decorationText,
       noteText,
@@ -252,6 +270,7 @@ async function deliverOrderEmails(
         <p style="${emailStyles.label}">Product</p>
         <p style="${emailStyles.value}">${input.productTitle}</p>
       </section>
+      ${orderTimeDallas ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Order time</p><p style="${emailStyles.value}">${orderTimeDallas} (Dallas)</p></section>` : ""}
       ${input.productPrice ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Pricing</p><p style="${emailStyles.value}">Unit price: ${input.productPrice}<br/>Quantity: ${qty}<br/>Setup fee: $35${input.totalPrice ? `<br/><strong>Total: ${input.totalPrice}</strong>` : ""}${priceReasonHtml}</p></section>` : ""}
       ${decorationInline ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Decoration</p><p style="${emailStyles.value}">${decorationInline}</p></section>` : ""}
       ${input.note?.trim() ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Note</p><p style="${emailStyles.value}">${input.note.trim()}</p></section>` : ""}
@@ -287,6 +306,7 @@ async function deliverOrderEmails(
         <p style="${emailStyles.label}">Product</p>
         <p style="${emailStyles.value}">${input.productTitle}</p>
       </section>
+      ${orderTimeDallas ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Order time</p><p style="${emailStyles.value}">${orderTimeDallas} (Dallas)</p></section>` : ""}
       ${input.productPrice ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Pricing</p><p style="${emailStyles.value}">Unit price: ${input.productPrice}<br/>Quantity: ${qty}<br/>Setup fee: $35${input.totalPrice ? `<br/><strong>Total: ${input.totalPrice}</strong>` : ""}${priceReasonHtml}</p></section>` : ""}
       ${decorationInline ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Decoration</p><p style="${emailStyles.value}">${decorationInline}</p></section>` : ""}
       ${input.note?.trim() ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Note</p><p style="${emailStyles.value}">${input.note.trim()}</p></section>` : ""}
@@ -335,5 +355,8 @@ export async function sendOrderEmailsAfterPayment(
     return { success: false, error: verified.error };
   }
   const { paymentIntentId: _pid, currencyCode: _cc, ...emailInput } = input;
-  return deliverOrderEmails(emailInput);
+  return deliverOrderEmails({
+    ...emailInput,
+    paymentIntentCreatedUnix: verified.paymentIntentCreatedUnix,
+  });
 }

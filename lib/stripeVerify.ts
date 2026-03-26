@@ -15,7 +15,9 @@ export async function assertPaidOrderMatchesPaymentIntent(
     currencyCode: string;
     decorationType?: DecorationType;
   }
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; paymentIntentCreatedUnix: number } | { ok: false; error: string }
+> {
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) {
     return { ok: false, error: "Payment verification is not configured." };
@@ -45,5 +47,5 @@ export async function assertPaidOrderMatchesPaymentIntent(
   if (cur !== input.currencyCode.toLowerCase().slice(0, 3)) {
     return { ok: false, error: "Currency mismatch." };
   }
-  return { ok: true };
+  return { ok: true, paymentIntentCreatedUnix: pi.created };
 }

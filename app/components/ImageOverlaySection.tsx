@@ -19,22 +19,14 @@ import type { BaseImages, NormalizedPosition } from "./designer/overlayConstants
 import {
   CENTER_POSITION,
   DIE_CUT_SCALE_DEFAULT,
-  EXPORT_HEIGHT,
-  EXPORT_WIDTH,
   FALLBACK_BASE_IMAGES,
-  DESIGN_ONLY_JPEG_QUALITY,
   DESIGN_ONLY_MAX_PX,
-  LEATHER_PATCH_PREVIEW_NUDGE_PX,
   OVERLAY_SCALE_DEFAULT,
   type Slot,
 } from "./designer/overlayConstants";
-import {
-  loadImage,
-  drawImageContain,
-  drawOverlayContain,
-  downscaleImageForPatchExport,
-} from "./designer/overlayCanvas";
+import { loadImage } from "./designer/overlayCanvas";
 import { OverlaySlot } from "./designer/OverlaySlot";
+import { toPng } from "html-to-image";
 import {
   cloneSlot,
   useSlotTransformHistory,
@@ -45,6 +37,7 @@ export type { BaseImages } from "./designer/overlayConstants";
 export type ImageOverlaySectionHandle = {
   getCompositedImages: () => Promise<{
     front?: string;
+    frontScalePreview?: string;
     side?: string;
     frontDesignOnly?: string;
     sideDesignOnly?: string;
@@ -61,9 +54,72 @@ function slotToolbarButtonClass(disabled?: boolean) {
   );
 }
 
-async function objectUrlToFullDataUrl(url: string): Promise<string | undefined> {
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function isVectorMimeType(mimeType: string): boolean {
+  const type = mimeType.toLowerCase();
+  return (
+    type.includes("svg") ||
+    type.includes("pdf") ||
+    type.includes("postscript") ||
+    type.includes("illustrator")
+  );
+}
+
+async function objectUrlToEmailSafeDataUrl(url: string): Promise<string | undefined> {
   try {
     const blob = await fetch(url).then((r) => r.blob());
+    if (isVectorMimeType(blob.type)) {
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("read"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    try {
+      const img = await loadImage(objectUrl);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || 1;
+      canvas.height = img.naturalHeight || 1;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return undefined;
+      ctx.drawImage(img, 0, 0);
+      return canvas.toDataURL("image/png");
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+async function fileToPngDataUrl(file: File): Promise<string | null> {
+  const sourceDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("read"));
+    reader.readAsDataURL(file);
+  }).catch(() => null);
+  if (!sourceDataUrl) return null;
+  try {
+    const img = await loadImage(sourceDataUrl);
+    const width = img.naturalWidth || 1;
+    const height = img.naturalHeight || 1;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((result) => resolve(result), "image/png");
+    });
+    if (!blob) return null;
     return await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
@@ -71,7 +127,7 @@ async function objectUrlToFullDataUrl(url: string): Promise<string | undefined> 
       reader.readAsDataURL(blob);
     });
   } catch {
-    return undefined;
+    return sourceDataUrl;
   }
 }
 
@@ -83,7 +139,7 @@ const ImageOverlaySection = forwardRef<
     decorationType?: DecorationType;
     leatherPatchImageSrc?: string | null;
     leatherOutline?: string | null;
-    /** User-uploaded silhouette / shape for die-cut outline (object URL). */
+    /** User-uploaded silhouette / shape for die-cut outline (data URL). */
     dieCutShapeUrl?: string | null;
   }
 >(function ImageOverlaySection(
@@ -124,6 +180,9 @@ const ImageOverlaySection = forwardRef<
 
   const frontScaleStartRef = useRef<ReturnType<typeof cloneSlot> | null>(null);
   const sideScaleStartRef = useRef<ReturnType<typeof cloneSlot> | null>(null);
+  const exportFrontStageRef = useRef<HTMLDivElement | null>(null);
+  const exportFrontScaleStageRef = useRef<HTMLDivElement | null>(null);
+  const exportSideStageRef = useRef<HTMLDivElement | null>(null);
 
   const baseSrcs: Record<Slot, string> = {
     front: baseImages?.front ?? FALLBACK_BASE_IMAGES.front,
@@ -138,10 +197,14 @@ const ImageOverlaySection = forwardRef<
   const setOverlay = useCallback(
     (slot: Slot, file: File | null) => {
       const setter = slot === "front" ? setOverlayFront : setOverlaySide;
-      setter((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return file ? URL.createObjectURL(file) : null;
-      });
+      if (!file) {
+        setter(null);
+      } else {
+        void (async () => {
+          const pngUrl = await fileToPngDataUrl(file);
+          setter(pngUrl);
+        })();
+      }
       if (!file) {
         if (slot === "front") {
           patchFront({
@@ -165,10 +228,7 @@ const ImageOverlaySection = forwardRef<
     const was = prevDecorationRef.current;
     prevDecorationRef.current = decorationType;
     if (decorationType !== "leather" || was === "leather") return;
-    setOverlaySide((p) => {
-      if (p) URL.revokeObjectURL(p);
-      return null;
-    });
+    setOverlaySide(null);
     patchSide({
       position: CENTER_POSITION,
       scale: OVERLAY_SCALE_DEFAULT,
@@ -215,10 +275,8 @@ const ImageOverlaySection = forwardRef<
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);
       ctx.drawImage(img, 0, 0, w, h);
-      return canvas.toDataURL("image/jpeg", DESIGN_ONLY_JPEG_QUALITY);
+      return canvas.toDataURL("image/png");
     } catch {
       return undefined;
     }
@@ -227,110 +285,42 @@ const ImageOverlaySection = forwardRef<
   const getCompositedImages = useCallback(async () => {
     const result: {
       front?: string;
+      frontScalePreview?: string;
       side?: string;
       frontDesignOnly?: string;
       sideDesignOnly?: string;
       dieCutShapeHighResDataUrl?: string;
     } = {};
-    const INSET = 0.12;
-    const SIDE_INSET_LEFT = 0.28;
-    const SIDE_INSET_RIGHT = 0.12;
-    const OVERLAY_FRACTION = 0.68;
-
-    const frontBase = baseSrcs.front;
-    const sideBase = baseSrcs.side;
-
-    const pf = frontPresentRef.current;
-    const ps = sidePresentRef.current;
-
-    /** Front composite only when customer artwork exists (leather patch texture alone does not count). */
-    const shouldExportFront = Boolean(overlayFront);
+    /**
+     * Export front composite when:
+     * - customer artwork exists, or
+     * - leather die-cut shape is submitted standalone (no artwork).
+     */
+    const shouldExportFront =
+      Boolean(overlayFront) ||
+      (decorationType === "leather" &&
+        leatherOutline === "die cut" &&
+        Boolean(dieCutShapeUrl));
 
     if (shouldExportFront) {
-      try {
-        const baseImg = await loadImage(frontBase);
-        const canvas = document.createElement("canvas");
-        canvas.width = EXPORT_WIDTH;
-        canvas.height = EXPORT_HEIGHT;
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
-        const base = drawImageContain(ctx, baseImg, EXPORT_WIDTH, EXPORT_HEIGHT);
-        const contentLeft = base.x + base.w * INSET;
-        const contentTop = base.y + base.h * INSET;
-        const contentW = base.w * (1 - INSET * 2);
-        const contentH = base.h * (1 - INSET * 2);
-
-        if (decorationType === "leather" && overlayFront) {
-          const patchBox =
-            Math.min(contentW, contentH) * leatherPatchPreviewMaxFrac(leatherOutline);
-          const pp = patchPositionRef.current;
-          const cx =
-            contentLeft +
-            contentW / 2 +
-            LEATHER_PATCH_PREVIEW_NUDGE_PX +
-            (pp.x - 0.5) * contentW;
-          const cy = contentTop + contentH / 2 + (pp.y - 0.5) * contentH;
-
-          if (leatherPatchImageSrc) {
-            const patchImgFull = await loadImage(leatherPatchImageSrc);
-            const patchImg = await downscaleImageForPatchExport(patchImgFull, 256);
-            ctx.save();
-            ctx.globalCompositeOperation = "multiply";
-            drawOverlayContain(
-              ctx,
-              patchImg,
-              cx - patchBox / 2,
-              cy - patchBox / 2,
-              patchBox,
-              patchBox
-            );
-            ctx.restore();
-          }
-
-          if (leatherOutline === "die cut" && dieCutShapeUrl) {
-            const dieFull = await loadImage(dieCutShapeUrl);
-            const dieImg = await downscaleImageForPatchExport(dieFull, 256);
-            const dieCutBox = patchBox * dieCutScale;
-            ctx.save();
-            ctx.globalCompositeOperation = leatherPatchImageSrc
-              ? "multiply"
-              : "source-over";
-            drawOverlayContain(
-              ctx,
-              dieImg,
-              cx - dieCutBox / 2,
-              cy - dieCutBox / 2,
-              dieCutBox,
-              dieCutBox
-            );
-            ctx.restore();
-          }
-        }
-
-        if (overlayFront) {
-          const overlayImg = await loadImage(overlayFront);
-          const centerX = contentLeft + pf.position.x * contentW;
-          const centerY = contentTop + pf.position.y * contentH;
-          const overlayMaxW = Math.max(
-            4,
-            Math.floor(contentW * OVERLAY_FRACTION * pf.scale)
-          );
-          const overlayMaxH = Math.max(
-            4,
-            Math.floor(contentH * OVERLAY_FRACTION * pf.scale)
-          );
-          const ox = centerX - overlayMaxW / 2;
-          const oy = centerY - overlayMaxH / 2;
-          drawOverlayContain(ctx, overlayImg, ox, oy, overlayMaxW, overlayMaxH);
-        }
-
-        result.front = canvas.toDataURL("image/png");
-        if (overlayFront) {
-          result.frontDesignOnly = await exportDesignOnly(overlayFront);
-        }
-      } catch {
-        // CORS or decode failure
+      if (exportFrontStageRef.current) {
+        const frontPng = await toPng(exportFrontStageRef.current, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+        });
+        result.front = frontPng;
+      }
+      if (exportFrontScaleStageRef.current) {
+        result.frontScalePreview = await toPng(exportFrontScaleStageRef.current, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+        });
+      }
+      if (!result.frontScalePreview) result.frontScalePreview = result.front;
+      if (overlayFront) {
+        result.frontDesignOnly = await exportDesignOnly(overlayFront);
       }
     }
 
@@ -339,45 +329,19 @@ const ImageOverlaySection = forwardRef<
       leatherOutline === "die cut" &&
       dieCutShapeUrl
     ) {
-      const hi = await objectUrlToFullDataUrl(dieCutShapeUrl);
+      const hi = await objectUrlToEmailSafeDataUrl(dieCutShapeUrl);
       if (hi) result.dieCutShapeHighResDataUrl = hi;
     }
 
     if (decorationType !== "leather" && overlaySide) {
-      try {
-        const [baseImg, overlayImg] = await Promise.all([
-          loadImage(sideBase),
-          loadImage(overlaySide),
-        ]);
-        const canvas = document.createElement("canvas");
-        canvas.width = EXPORT_WIDTH;
-        canvas.height = EXPORT_HEIGHT;
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, EXPORT_WIDTH, EXPORT_HEIGHT);
-        const base = drawImageContain(ctx, baseImg, EXPORT_WIDTH, EXPORT_HEIGHT);
-        const contentLeft = base.x + base.w * SIDE_INSET_LEFT;
-        const contentTop = base.y + base.h * INSET;
-        const contentW = base.w * (1 - SIDE_INSET_LEFT - SIDE_INSET_RIGHT);
-        const contentH = base.h * (1 - INSET * 2);
-        const centerX = contentLeft + ps.position.x * contentW;
-        const centerY = contentTop + ps.position.y * contentH;
-        const overlayMaxW = Math.max(
-          4,
-          Math.floor(contentW * OVERLAY_FRACTION * ps.scale)
-        );
-        const overlayMaxH = Math.max(
-          4,
-          Math.floor(contentH * OVERLAY_FRACTION * ps.scale)
-        );
-        const ox = centerX - overlayMaxW / 2;
-        const oy = centerY - overlayMaxH / 2;
-        drawOverlayContain(ctx, overlayImg, ox, oy, overlayMaxW, overlayMaxH);
-        result.side = canvas.toDataURL("image/png");
-        result.sideDesignOnly = await exportDesignOnly(overlaySide);
-      } catch {
-        // skip
+      if (exportSideStageRef.current) {
+        result.side = await toPng(exportSideStageRef.current, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: "#ffffff",
+        });
       }
+      result.sideDesignOnly = await exportDesignOnly(overlaySide);
     }
 
     return result;
@@ -399,38 +363,22 @@ const ImageOverlaySection = forwardRef<
 
   const copyFrontToSide = useCallback(async () => {
     if (decorationType === "leather" || !overlayFront) return;
-    try {
-      const blob = await fetch(overlayFront).then((r) => r.blob());
-      setOverlaySide((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(blob);
-      });
-      const f = frontPresentRef.current;
-      sideHistory.commit({
-        position: { ...f.position },
-        scale: f.scale,
-      });
-    } catch {
-      // ignore
-    }
+    setOverlaySide(overlayFront);
+    const f = frontPresentRef.current;
+    sideHistory.commit({
+      position: { ...f.position },
+      scale: f.scale,
+    });
   }, [decorationType, overlayFront, sideHistory]);
 
   const copySideToFront = useCallback(async () => {
     if (decorationType === "leather" || !overlaySide) return;
-    try {
-      const blob = await fetch(overlaySide).then((r) => r.blob());
-      setOverlayFront((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(blob);
-      });
-      const s = sidePresentRef.current;
-      frontHistory.commit({
-        position: { ...s.position },
-        scale: s.scale,
-      });
-    } catch {
-      // ignore
-    }
+    setOverlayFront(overlaySide);
+    const s = sidePresentRef.current;
+    frontHistory.commit({
+      position: { ...s.position },
+      scale: s.scale,
+    });
   }, [decorationType, overlaySide, frontHistory]);
 
   const onFrontScalePointerDown = useCallback(() => {
@@ -546,34 +494,40 @@ const ImageOverlaySection = forwardRef<
     ]
   );
 
+  // Export-only visual correction to match live preview more closely.
+  const exportFrontOverlayPosition = useMemo(
+    () => ({
+      x:
+        decorationType === "leather"
+          ? clamp01(frontHistory.present.position.x + 0.01)
+          : clamp01(frontHistory.present.position.x - 0.02),
+      y: frontHistory.present.position.y,
+    }),
+    [decorationType, frontHistory.present.position.x, frontHistory.present.position.y]
+  );
+  const exportFrontPatchMaxFrac =
+    decorationType === "leather" ? patchMaxFrac * 0.85 : patchMaxFrac;
+  const exportFrontScalePreviewPatchMaxFrac =
+    decorationType === "leather" ? exportFrontPatchMaxFrac * 1.35 : exportFrontPatchMaxFrac;
+  const exportFrontScalePreviewOverlayScale = frontHistory.present.scale * 1.12;
+
   return (
     <div className="min-w-0 w-full max-w-none">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4 sm:mb-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Live preview
-            </span>
             <DesignerHelpDialog />
           </div>
-          <h2 className="mt-1.5 text-base sm:text-lg font-medium tracking-tight text-[#111827]">
-            Design preview
-          </h2>
+          <h2 className="mt-1 text-base sm:text-lg font-medium tracking-tight text-[#111827]">Preview</h2>
           <p className="text-xs sm:text-sm text-zinc-600 mt-1 max-w-3xl leading-snug">
             {decorationType === "leather"
-              ? "Leatherette is front-only on a standard reference hat so the patch lines up consistently. Your order still uses the hat you pick below—add your artwork on top."
+              ? "Leatherette: front view only."
               : baseImages
-                ? "Uses the selected product. Drop an image on each view to preview placement."
-                : "Select a product, then drop an image on each view."}
+                ? "Embroidery: front + side views."
+                : "Select a product to start."}
           </p>
         </div>
       </div>
-
-      <p className="text-[10px] sm:text-[11px] text-zinc-500 mb-3 sm:mb-4 leading-snug max-w-3xl">
-        Tip: click the preview with artwork, then use arrow keys to nudge (Shift = finer). With
-        leatherette, use the brown Patch arrows (top right) to move the texture and submitted
-        die-cut shape together; artwork uses the diamond pad on the left. Undo/redo apply per view.
-      </p>
 
       <div
         className={
@@ -625,6 +579,8 @@ const ImageOverlaySection = forwardRef<
           onScalePointerUp={onFrontScalePointerUp}
           onClear={clearOverlay("front")}
           onFile={handleFile("front")}
+          onOverlayProcessed={setOverlayFront}
+          decorationType={decorationType}
           slotActions={overlayFront ? frontActions : undefined}
           soloFullWidth={decorationType === "leather"}
           largerPreviewMobileOnly={decorationType === "leather"}
@@ -644,7 +600,117 @@ const ImageOverlaySection = forwardRef<
             onScalePointerUp={onSideScalePointerUp}
             onClear={clearOverlay("side")}
             onFile={handleFile("side")}
+            onOverlayProcessed={setOverlaySide}
+            decorationType={decorationType}
             slotActions={overlaySide ? sideActions : undefined}
+          />
+        )}
+      </div>
+
+      <div
+        aria-hidden
+        className="fixed -left-[200vw] -top-[200vh] opacity-0 pointer-events-none"
+      >
+        <OverlaySlot
+          slot="front"
+          baseSrc={baseSrcs.front}
+          overlayUrl={overlayFront}
+          patchUnderlayUrl={decorationType === "leather" ? leatherPatchImageSrc : null}
+          patchPosition={decorationType === "leather" ? patchPosition : undefined}
+          onPatchPositionCommit={undefined}
+          patchDieCutShapeUrl={
+            decorationType === "leather" && leatherOutline === "die cut"
+              ? dieCutShapeUrl
+              : null
+          }
+          dieCutScale={
+            decorationType === "leather" &&
+            leatherOutline === "die cut" &&
+            dieCutShapeUrl
+              ? dieCutScale
+              : undefined
+          }
+          onDieCutScaleLive={
+            decorationType === "leather" &&
+            leatherOutline === "die cut" &&
+            dieCutShapeUrl
+              ? () => {}
+              : undefined
+          }
+          onDieCutScalePointerDown={() => {}}
+          onDieCutScalePointerUp={() => {}}
+          patchMaxFrac={exportFrontPatchMaxFrac}
+          overlayPosition={exportFrontOverlayPosition}
+          overlayScale={frontHistory.present.scale}
+          onPositionCommit={() => {}}
+          onScaleLive={() => {}}
+          onScalePointerDown={() => {}}
+          onScalePointerUp={() => {}}
+          onClear={() => {}}
+          onFile={() => {}}
+          decorationType={decorationType}
+          exportCaptureMode
+          exportCaptureRef={exportFrontStageRef}
+        />
+        <OverlaySlot
+          slot="front"
+          baseSrc={baseSrcs.front}
+          overlayUrl={overlayFront}
+          patchUnderlayUrl={decorationType === "leather" ? leatherPatchImageSrc : null}
+          patchPosition={decorationType === "leather" ? patchPosition : undefined}
+          onPatchPositionCommit={undefined}
+          patchDieCutShapeUrl={
+            decorationType === "leather" && leatherOutline === "die cut"
+              ? dieCutShapeUrl
+              : null
+          }
+          dieCutScale={
+            decorationType === "leather" &&
+            leatherOutline === "die cut" &&
+            dieCutShapeUrl
+              ? dieCutScale
+              : undefined
+          }
+          onDieCutScaleLive={
+            decorationType === "leather" &&
+            leatherOutline === "die cut" &&
+            dieCutShapeUrl
+              ? () => {}
+              : undefined
+          }
+          onDieCutScalePointerDown={() => {}}
+          onDieCutScalePointerUp={() => {}}
+          patchMaxFrac={exportFrontScalePreviewPatchMaxFrac}
+          overlayPosition={exportFrontOverlayPosition}
+          overlayScale={exportFrontScalePreviewOverlayScale}
+          onPositionCommit={() => {}}
+          onScaleLive={() => {}}
+          onScalePointerDown={() => {}}
+          onScalePointerUp={() => {}}
+          onClear={() => {}}
+          onFile={() => {}}
+          decorationType={decorationType}
+          exportCaptureMode
+          exportCaptureRef={exportFrontScaleStageRef}
+        />
+        {decorationType !== "leather" && (
+          <OverlaySlot
+            slot="side"
+            baseSrc={baseSrcs.side}
+            overlayUrl={overlaySide}
+            patchUnderlayUrl={null}
+            patchMaxFrac={0.22}
+            overlayPosition={sideHistory.present.position}
+            overlayScale={sideHistory.present.scale}
+            onPositionCommit={() => {}}
+            onScaleLive={() => {}}
+            onScalePointerDown={() => {}}
+            onScalePointerUp={() => {}}
+            onClear={() => {}}
+            onFile={() => {}}
+            decorationType={decorationType}
+            exportCaptureMode
+            exportCaptureRef={exportSideStageRef}
           />
         )}
       </div>

@@ -6,6 +6,7 @@ import {
   useRef,
   useEffect,
   useLayoutEffect,
+  useMemo,
 } from "react";
 import {
   X,
@@ -14,7 +15,10 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Scissors,
+  ImageIcon,
 } from "lucide-react";
+import type { DecorationType } from "@/lib/decoration";
 import type { NormalizedPosition } from "./overlayConstants";
 import {
   ARTWORK_FILE_HINT,
@@ -33,6 +37,7 @@ import {
   type Slot,
 } from "./overlayConstants";
 import { DropZone } from "./DropZone";
+import { getStageGeometry } from "./stageGeometry";
 
 type ArrowPadDir = "up" | "left" | "right" | "down";
 
@@ -44,6 +49,8 @@ const DIAMOND_W = {
   l: "0% 50%",
   c: "50% 50%",
 } as const;
+
+const FULLSCREEN_PATCH_SCALE_MULTIPLIER = 1.22;
 
 function ArrowPadWedge({
   dir,
@@ -105,10 +112,12 @@ function DieCutShapePreview({
   src,
   patchUnderlayUrl,
   dieCutFrac,
+  applyOverlayMask,
 }: {
   src: string;
   patchUnderlayUrl: string | null;
   dieCutFrac: number;
+  applyOverlayMask: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -196,10 +205,16 @@ function DieCutShapePreview({
         ref={imgRef}
         src={src}
         alt="Die-cut"
-        className="diecut-img diecut-img-layout-only"
+        className={
+          applyOverlayMask
+            ? "diecut-img diecut-img-layout-only"
+            : "diecut-img"
+        }
         onLoad={updateOverlayRect}
       />
-      <div ref={overlayRef} className="leather-overlay" aria-hidden />
+      {applyOverlayMask ? (
+        <div ref={overlayRef} className="leather-overlay" aria-hidden />
+      ) : null}
     </div>
   );
 }
@@ -228,12 +243,16 @@ export function OverlaySlot({
   onScalePointerUp,
   onClear,
   onFile,
+  onOverlayProcessed,
+  decorationType = "embroidery",
   /** Undo/redo/copy — bottom bar, right-aligned. */
   slotActions,
   /** Single full-width column (e.g. leatherette front-only): taller preview on larger screens. */
   soloFullWidth = false,
   /** Only show the “Larger” fullscreen control below `md` (desktop uses the inline preview). */
   largerPreviewMobileOnly = false,
+  exportCaptureMode = false,
+  exportCaptureRef,
 }: {
   slot: Slot;
   baseSrc: string;
@@ -255,17 +274,25 @@ export function OverlaySlot({
   onScalePointerUp: () => void;
   onClear: () => void;
   onFile: (file: File) => void;
+  onOverlayProcessed?: (dataUrl: string) => void;
+  decorationType?: DecorationType;
   slotActions?: React.ReactNode;
   soloFullWidth?: boolean;
   largerPreviewMobileOnly?: boolean;
+  exportCaptureMode?: boolean;
+  exportCaptureRef?: React.Ref<HTMLDivElement>;
 }) {
   const label = slot === "front" ? "Front" : "Side";
   const showDieCutSlider = Boolean(
     patchDieCutShapeUrl && onDieCutScaleLive && typeof dieCutScale === "number"
   );
+  const shouldApplySubmittedDieCutMask = Boolean(patchDieCutShapeUrl);
   const showArtworkSlider = Boolean(overlayUrl);
   const twoLeftSliders = showDieCutSlider && showArtworkSlider;
   const dieCutFrac = patchMaxFrac * (dieCutScale ?? DIE_CUT_SCALE_DEFAULT);
+  const fullscreenPatchMaxFrac = patchMaxFrac * FULLSCREEN_PATCH_SCALE_MULTIPLIER;
+  const fullscreenDieCutFrac =
+    fullscreenPatchMaxFrac * (dieCutScale ?? DIE_CUT_SCALE_DEFAULT);
   const [position, setPosition] = useState<NormalizedPosition>(() => overlayPosition);
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ clientX: 0, clientY: 0, startX: 0, startY: 0 });
@@ -316,19 +343,26 @@ export function OverlaySlot({
     }
   }, [overlayUrl]);
 
-  /**
-   * Horizontal “padding” must be real inset, not Tailwind padding: the artwork drag layer is
-   * `position:absolute` with `w-full h-full`, and abs children use the padding edge of the
-   * containing block — so pl/pr alone still lets the hit target cover the left slider columns.
-   */
-  const artworkInteractInsetClass =
-    slot === "side"
-      ? "top-0 bottom-0 left-[calc(5rem-2px)] sm:left-[calc(7rem-2px)] right-[calc(2rem+2px)] sm:right-[calc(3rem+2px)] py-12 sm:py-16"
-      : twoLeftSliders
-        ? "top-0 bottom-0 left-[calc(5.5rem+2px)] sm:left-[calc(7rem+2px)] right-12 sm:right-16 py-12 sm:py-16"
-        : showDieCutSlider || showArtworkSlider
-          ? "top-0 bottom-0 left-10 right-12 sm:right-16 py-12 sm:py-16"
-          : "top-0 bottom-0 left-12 sm:left-16 right-12 sm:right-16 py-12 sm:py-16";
+  const artworkGeometry = useMemo(
+    () =>
+      getStageGeometry({
+        stageRect: { x: 0, y: 0, width: 1000, height: 1000 },
+        slot,
+        showArtworkSlider,
+        showDieCutSlider,
+      }),
+    [slot, showArtworkSlider, showDieCutSlider]
+  );
+
+  const artworkInteractInsetStyle = useMemo(
+    () => ({
+      left: `${artworkGeometry.insets.left}px`,
+      right: `${artworkGeometry.insets.right}px`,
+      top: `${artworkGeometry.insets.top}px`,
+      bottom: `${artworkGeometry.insets.bottom}px`,
+    }),
+    [artworkGeometry]
+  );
 
   const clampToContent = useCallback(
     (centerX: number, centerY: number) => {
@@ -578,28 +612,104 @@ export function OverlaySlot({
   );
 
   const [showFullScreen, setShowFullScreen] = useState(false);
+  const [removeColorHex, setRemoveColorHex] = useState("#ffffff");
+  const [removeTolerance, setRemoveTolerance] = useState(42);
+  const [removeBusy, setRemoveBusy] = useState(false);
+
+  const removeSelectedColorFromOverlay = useCallback(async () => {
+    if (!overlayUrl || !onOverlayProcessed) return;
+    setRemoveBusy(true);
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("image-load"));
+        img.src = overlayUrl;
+      });
+      const width = img.naturalWidth || 1;
+      const height = img.naturalHeight || 1;
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const data = imageData.data;
+      const hex = removeColorHex.replace("#", "");
+      const targetR = Number.parseInt(hex.slice(0, 2), 16) || 255;
+      const targetG = Number.parseInt(hex.slice(2, 4), 16) || 255;
+      const targetB = Number.parseInt(hex.slice(4, 6), 16) || 255;
+      const feather = 16;
+      const softStart = Math.max(0, removeTolerance - feather);
+
+      for (let i = 0; i < data.length; i += 4) {
+        const dr = data[i] - targetR;
+        const dg = data[i + 1] - targetG;
+        const db = data[i + 2] - targetB;
+        const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+        if (distance <= softStart) {
+          data[i + 3] = 0;
+          continue;
+        }
+        if (distance >= removeTolerance) {
+          continue;
+        }
+        const keep = (distance - softStart) / Math.max(1, removeTolerance - softStart);
+        data[i + 3] = Math.round(data[i + 3] * keep);
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((result) => resolve(result), "image/png");
+      });
+      if (!blob) return;
+      const pngDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("read"));
+        reader.readAsDataURL(blob);
+      });
+      onOverlayProcessed(pngDataUrl);
+    } finally {
+      setRemoveBusy(false);
+    }
+  }, [overlayUrl, onOverlayProcessed, removeColorHex, removeTolerance]);
 
   const previewMaxHeightClass = soloFullWidth
     ? "max-h-[min(52vh,320px)] sm:max-h-[min(56vh,420px)] md:max-h-[min(62vh,520px)] lg:max-h-[min(70vh,600px)]"
     : "max-h-[min(52vh,320px)] sm:max-h-[min(48vh,380px)] lg:max-h-[420px]";
 
+  const stageClassName = exportCaptureMode
+    ? "relative w-[400px] h-[300px] bg-white rounded-none border-0 shadow-none overflow-hidden"
+    : (overlayUrl || showDieCutSlider
+        ? "relative w-full aspect-4/3 bg-white rounded-lg border border-[#e5e7eb] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-[#111827]/20 focus-visible:ring-offset-1 "
+        : "relative w-full aspect-4/3 bg-white rounded-lg border border-[#e5e7eb] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden ") +
+      previewMaxHeightClass;
+
   return (
     <div className="flex flex-col min-w-0 w-full">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
-          {label} view
-        </p>
-      </div>
+      {!exportCaptureMode && (
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+            {label} view
+          </p>
+        </div>
+      )}
       <div
-        ref={previewFocusRef}
-        tabIndex={overlayUrl || showDieCutSlider ? 0 : -1}
-        onKeyDown={overlayUrl ? handleKeyDown : undefined}
-        className={
-          (overlayUrl || showDieCutSlider
-            ? "relative w-full aspect-4/3 bg-white rounded-lg border border-[#e5e7eb] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-[#111827]/20 focus-visible:ring-offset-1 "
-            : "relative w-full aspect-4/3 bg-white rounded-lg border border-[#e5e7eb] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden ") +
-          previewMaxHeightClass
-        }
+        ref={(node) => {
+          previewFocusRef.current = node;
+          if (!exportCaptureRef) return;
+          if (typeof exportCaptureRef === "function") {
+            exportCaptureRef(node);
+          } else {
+            exportCaptureRef.current = node;
+          }
+        }}
+        tabIndex={exportCaptureMode ? -1 : overlayUrl || showDieCutSlider ? 0 : -1}
+        onKeyDown={exportCaptureMode ? undefined : overlayUrl ? handleKeyDown : undefined}
+        className={stageClassName}
       >
         {!baseLoaded && (
           <div
@@ -667,6 +777,7 @@ export function OverlaySlot({
                     src={patchDieCutShapeUrl}
                     patchUnderlayUrl={patchUnderlayUrl ?? null}
                     dieCutFrac={dieCutFrac}
+                    applyOverlayMask={shouldApplySubmittedDieCutMask}
                   />
                 </div>
               </div>
@@ -700,6 +811,7 @@ export function OverlaySlot({
               src={patchDieCutShapeUrl}
               patchUnderlayUrl={patchUnderlayUrl ?? null}
               dieCutFrac={dieCutFrac}
+              applyOverlayMask={shouldApplySubmittedDieCutMask}
             />
           </div>
         )}
@@ -780,14 +892,20 @@ export function OverlaySlot({
           <>
             <div
               ref={innerRef}
-              className={`absolute z-[10] flex items-center justify-center pointer-events-none ${artworkInteractInsetClass}`}
+              className="absolute z-[10] flex items-center justify-center pointer-events-none"
+              style={artworkInteractInsetStyle}
             >
-              <div
-                className="absolute inline-flex items-center justify-center pointer-events-auto cursor-grab active:cursor-grabbing"
+              <img
+                ref={overlayRef}
+                src={overlayUrl}
+                alt="Overlay"
+                className="absolute pointer-events-auto cursor-grab active:cursor-grabbing object-contain select-none touch-none"
                 style={{
                   left: `${position.x * 100}%`,
                   top: `${position.y * 100}%`,
                   transform: "translate(-50%, -50%)",
+                  width: `${OVERLAY_UI_MAX_FRAC * overlayScale * 100}%`,
+                  height: `${OVERLAY_UI_MAX_FRAC * overlayScale * 100}%`,
                 }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
@@ -795,21 +913,11 @@ export function OverlaySlot({
                 onPointerLeave={(e) => {
                   if (isDragging) handlePointerUp(e);
                 }}
-              >
-                <img
-                  ref={overlayRef}
-                  src={overlayUrl}
-                  alt="Overlay"
-                  className="w-auto h-auto max-w-none max-h-none object-contain select-none touch-none"
-                  style={{
-                    maxWidth: `${OVERLAY_UI_MAX_FRAC * overlayScale * 100}%`,
-                    maxHeight: `${OVERLAY_UI_MAX_FRAC * overlayScale * 100}%`,
-                  }}
-                  draggable={false}
-                />
-              </div>
+                draggable={false}
+              />
             </div>
-            <div
+            {!exportCaptureMode && (
+              <div
               className={
                 "absolute top-2 z-20 inline-block p-px pointer-events-auto " +
                 (twoLeftSliders ? "left-20" : "left-10")
@@ -952,8 +1060,10 @@ export function OverlaySlot({
                 <span className="size-5" aria-hidden />
               </div>
               </div>
-            </div>
-            <button
+              </div>
+            )}
+            {!exportCaptureMode && (
+              <button
               type="button"
               onClick={onClear}
               className="absolute top-2 right-2 inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-sky-50/90 hover:border-sky-200 hover:text-zinc-900 z-10 transition-colors"
@@ -961,7 +1071,8 @@ export function OverlaySlot({
               <X className="w-3.5 h-3.5" aria-hidden="true" />
               Clear
             </button>
-            {slotActions ? (
+            )}
+            {!exportCaptureMode && slotActions ? (
               <div
                 className={
                   "absolute bottom-0 right-0 z-10 flex flex-wrap items-center justify-end gap-1 py-1.5 px-1.5 min-h-[32px] border-t border-[#e5e7eb] bg-white/98 backdrop-blur-sm rounded-br-lg " +
@@ -975,7 +1086,7 @@ export function OverlaySlot({
             ) : null}
           </>
         )}
-        {showDieCutSlider && (
+        {showDieCutSlider && !showFullScreen && !exportCaptureMode && (
           <div
             className={
               "pointer-events-auto isolate absolute left-0 top-0 bottom-0 z-[100] flex w-10 flex-col items-center justify-center overflow-hidden rounded-l-lg border-y border-l border-[#6b4423]/50 bg-gradient-to-b from-[#faf4ed] to-[#f0e4d8] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] " +
@@ -983,8 +1094,8 @@ export function OverlaySlot({
             }
             style={{ paddingLeft: "2px" }}
           >
-            <span className="text-[7px] font-semibold uppercase tracking-[0.1em] text-[#6b4423] mb-1 mt-2.5 text-center leading-tight px-0.5">
-              Die cut
+            <span className="mb-1 mt-2.5 inline-flex items-center justify-center text-[#6b4423]">
+              <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-visible">
               <input
@@ -1011,7 +1122,7 @@ export function OverlaySlot({
             </div>
           </div>
         )}
-        {showArtworkSlider && (
+        {showArtworkSlider && !showFullScreen && !exportCaptureMode && (
           <div
             className={
               "pointer-events-auto isolate absolute top-0 bottom-0 z-[101] flex w-10 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-white to-[#fafafa] border-r border-[#e5e7eb] " +
@@ -1019,8 +1130,8 @@ export function OverlaySlot({
             }
             style={{ paddingLeft: "2px" }}
           >
-            <span className="text-[8px] font-semibold uppercase tracking-[0.12em] text-[#6b7280] mb-1 mt-2.5 whitespace-nowrap">
-              Artwork
+            <span className="mb-1 mt-2.5 inline-flex items-center justify-center text-[#6b7280]">
+              <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-visible">
               <input
@@ -1048,7 +1159,8 @@ export function OverlaySlot({
           </div>
         )}
       </div>
-      <DropZone
+      {!exportCaptureMode && (
+        <DropZone
         label={overlayUrl ? "Drop another image to replace" : `Drop image for ${label}`}
         onFile={onFile}
         rightActionMobileOnly={largerPreviewMobileOnly}
@@ -1064,13 +1176,54 @@ export function OverlaySlot({
             <span className="hidden sm:inline">Larger</span>
           </button>
         }
-      />
-      <p className="mt-2 text-[10px] sm:text-[11px] text-zinc-500 leading-snug">
-        {ARTWORK_FILE_HINT}
-      </p>
-      {showFullScreen && (
+        />
+      )}
+      {!exportCaptureMode && decorationType === "embroidery" && overlayUrl && (
+        <div className="mt-2 rounded-md border border-zinc-200 bg-white p-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-2 text-[11px] text-zinc-600">
+              Remove color
+              <input
+                type="color"
+                value={removeColorHex}
+                onChange={(e) => setRemoveColorHex(e.target.value)}
+                className="h-7 w-8 cursor-pointer rounded border border-zinc-300 bg-white p-0.5"
+                aria-label="Select background color to remove"
+              />
+            </label>
+            <label className="inline-flex items-center gap-2 text-[11px] text-zinc-600">
+              Tolerance
+              <input
+                type="range"
+                min={8}
+                max={120}
+                step={1}
+                value={removeTolerance}
+                onChange={(e) => setRemoveTolerance(Number.parseInt(e.target.value, 10))}
+                className="w-24"
+                aria-label="Color removal tolerance"
+              />
+              <span className="w-7 text-right text-[10px] text-zinc-500">{removeTolerance}</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => void removeSelectedColorFromOverlay()}
+              disabled={removeBusy}
+              className="ml-auto inline-flex items-center rounded-md border border-zinc-300 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {removeBusy ? "Removing..." : "Remove selected color"}
+            </button>
+          </div>
+        </div>
+      )}
+      {!exportCaptureMode && (
+        <p className="mt-2 text-[10px] sm:text-[11px] text-zinc-500 leading-snug">
+          {ARTWORK_FILE_HINT}
+        </p>
+      )}
+      {showFullScreen && !exportCaptureMode && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+          className="fixed inset-0 z-[300] bg-black"
           onClick={() => setShowFullScreen(false)}
           role="dialog"
           aria-modal="true"
@@ -1079,128 +1232,131 @@ export function OverlaySlot({
           <button
             type="button"
             onClick={() => setShowFullScreen(false)}
-            className="absolute top-3 right-3 p-2 rounded-lg bg-white/15 text-white hover:bg-white/30 hover:ring-1 hover:ring-white/40 transition-colors"
+            className="absolute top-3 right-3 z-20 p-2 rounded-md bg-black/45 text-white hover:bg-black/65 transition-colors"
             aria-label="Close preview"
           >
             <X className="w-5 h-5" />
           </button>
           <div
-            className="relative w-full max-w-4xl aspect-4/3 bg-white rounded-lg overflow-hidden shadow-2xl"
+            className="relative h-screen w-screen overflow-hidden bg-black"
             onClick={(e) => e.stopPropagation()}
           >
-            <img
-              src={baseSrc}
-              alt={label}
-              className="absolute inset-0 z-0 h-full w-full object-contain p-2 sm:p-3 md:p-6 lg:p-8"
-            />
-            {onPatchPositionCommit && (patchUnderlayUrl || patchDieCutShapeUrl) && (
-              <div className="absolute inset-0 z-[4] pointer-events-none">
-                {patchUnderlayUrl && (
-                  <div
-                    className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none p-2 sm:p-3 md:p-6 lg:p-8"
-                    style={{
-                      transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)`,
-                    }}
-                    aria-hidden
-                  >
-                    <div
-                      className="absolute flex items-center justify-center w-full h-full pointer-events-none"
-                      style={{
-                        left: `${patchPos.x * 100}%`,
-                        top: `${patchPos.y * 100}%`,
-                        transform: "translate(-50%, -50%)",
-                      }}
-                    >
-                      <img
-                        src={patchUnderlayUrl}
-                        alt=""
-                        className="w-auto h-auto object-contain mix-blend-multiply"
-                        style={{
-                          maxWidth: `${patchMaxFrac * 100}%`,
-                          maxHeight: `${patchMaxFrac * 100}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-                {patchDieCutShapeUrl && (
-                  <div
-                    className="absolute inset-0 z-[6] flex items-center justify-center pointer-events-none p-2 sm:p-3 md:p-6 lg:p-8"
-                    style={{
-                      transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)`,
-                    }}
-                    aria-hidden
-                  >
-                    <div
-                      className="absolute flex items-center justify-center w-full h-full pointer-events-none"
-                      style={{
-                        left: `${patchPos.x * 100}%`,
-                        top: `${patchPos.y * 100}%`,
-                        transform: "translate(-50%, -50%)",
-                      }}
-                    >
-                      <DieCutShapePreview
-                        src={patchDieCutShapeUrl}
-                        patchUnderlayUrl={patchUnderlayUrl ?? null}
-                        dieCutFrac={dieCutFrac}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            {!onPatchPositionCommit && patchUnderlayUrl && (
-              <div
-                className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none p-2 sm:p-3 md:p-6 lg:p-8"
-                style={{ transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)` }}
-                aria-hidden
-              >
+            <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-3">
+              <div className="relative aspect-4/3 w-full max-h-full max-w-[min(calc(100vw-1rem),calc((100vh-1rem)*4/3))] overflow-hidden rounded-lg bg-white">
                 <img
-                  src={patchUnderlayUrl}
-                  alt=""
-                  className="w-auto h-auto object-contain mix-blend-multiply"
-                  style={{
-                    maxWidth: `${patchMaxFrac * 100}%`,
-                    maxHeight: `${patchMaxFrac * 100}%`,
-                  }}
+                  src={baseSrc}
+                  alt={label}
+                  className="absolute inset-0 z-0 h-full w-full object-contain p-2 sm:p-3"
                 />
+                {onPatchPositionCommit && (patchUnderlayUrl || patchDieCutShapeUrl) && (
+                  <div className="absolute inset-0 z-[4] pointer-events-none">
+                    {patchUnderlayUrl && (
+                      <div
+                        className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none p-2 sm:p-3"
+                        style={{
+                          transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)`,
+                        }}
+                        aria-hidden
+                      >
+                        <div
+                          className="absolute flex items-center justify-center w-full h-full pointer-events-none"
+                          style={{
+                            left: `${patchPos.x * 100}%`,
+                            top: `${patchPos.y * 100}%`,
+                            transform: "translate(-50%, -50%)",
+                          }}
+                        >
+                          <img
+                            src={patchUnderlayUrl}
+                            alt=""
+                            className="w-auto h-auto object-contain mix-blend-multiply"
+                            style={{
+                              maxWidth: `${fullscreenPatchMaxFrac * 100}%`,
+                              maxHeight: `${fullscreenPatchMaxFrac * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    {patchDieCutShapeUrl && (
+                      <div
+                        className="absolute inset-0 z-[6] flex items-center justify-center pointer-events-none p-2 sm:p-3"
+                        style={{
+                          transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)`,
+                        }}
+                        aria-hidden
+                      >
+                        <div
+                          className="absolute flex items-center justify-center w-full h-full pointer-events-none"
+                          style={{
+                            left: `${patchPos.x * 100}%`,
+                            top: `${patchPos.y * 100}%`,
+                            transform: "translate(-50%, -50%)",
+                          }}
+                        >
+                          <DieCutShapePreview
+                            src={patchDieCutShapeUrl}
+                            patchUnderlayUrl={patchUnderlayUrl ?? null}
+                            dieCutFrac={fullscreenDieCutFrac}
+                            applyOverlayMask={shouldApplySubmittedDieCutMask}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!onPatchPositionCommit && patchUnderlayUrl && (
+                  <div
+                    className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none p-2 sm:p-3"
+                    style={{ transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)` }}
+                    aria-hidden
+                  >
+                    <img
+                      src={patchUnderlayUrl}
+                      alt=""
+                      className="w-auto h-auto object-contain mix-blend-multiply"
+                      style={{
+                        maxWidth: `${fullscreenPatchMaxFrac * 100}%`,
+                        maxHeight: `${fullscreenPatchMaxFrac * 100}%`,
+                      }}
+                    />
+                  </div>
+                )}
+                {!onPatchPositionCommit && patchDieCutShapeUrl && (
+                  <div
+                    className="absolute inset-0 z-[6] flex items-center justify-center pointer-events-none p-2 sm:p-3"
+                    style={{ transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)` }}
+                    aria-hidden
+                  >
+                    <DieCutShapePreview
+                      src={patchDieCutShapeUrl}
+                      patchUnderlayUrl={patchUnderlayUrl ?? null}
+                      dieCutFrac={fullscreenDieCutFrac}
+                      applyOverlayMask={shouldApplySubmittedDieCutMask}
+                    />
+                  </div>
+                )}
+                {overlayUrl && (
+                  <div
+                    className="absolute z-[10] flex items-center justify-center pointer-events-none"
+                    style={artworkInteractInsetStyle}
+                  >
+                    <img
+                      src={overlayUrl}
+                      alt="Overlay"
+                      className="absolute pointer-events-none object-contain"
+                      style={{
+                        left: `${position.x * 100}%`,
+                        top: `${position.y * 100}%`,
+                        transform: "translate(-50%, -50%)",
+                        width: `${OVERLAY_UI_MAX_FRAC * overlayScale * 100}%`,
+                        height: `${OVERLAY_UI_MAX_FRAC * overlayScale * 100}%`,
+                      }}
+                    />
+                  </div>
+                )}
               </div>
-            )}
-            {!onPatchPositionCommit && patchDieCutShapeUrl && (
-              <div
-                className="absolute inset-0 z-[6] flex items-center justify-center pointer-events-none p-2 sm:p-3 md:p-6 lg:p-8"
-                style={{ transform: `translateX(${LEATHER_PATCH_PREVIEW_NUDGE_PX}px)` }}
-                aria-hidden
-              >
-                <DieCutShapePreview
-                  src={patchDieCutShapeUrl}
-                  patchUnderlayUrl={patchUnderlayUrl ?? null}
-                  dieCutFrac={dieCutFrac}
-                />
-              </div>
-            )}
-            {overlayUrl && (
-              <div className="absolute inset-0 z-[10] flex items-center justify-center p-2 sm:p-3 md:p-12 lg:p-20">
-                <div
-                  className="absolute flex items-center justify-center w-full h-full"
-                  style={{
-                    left: `${position.x * 100}%`,
-                    top: `${position.y * 100}%`,
-                    transform: "translate(-50%, -50%)",
-                  }}
-                >
-                  <img
-                    src={overlayUrl}
-                    alt="Overlay"
-                    className="w-auto h-auto max-w-none max-h-none object-contain pointer-events-none"
-                    style={{
-                      maxWidth: `${OVERLAY_UI_MAX_FRAC * overlayScale * 100}%`,
-                      maxHeight: `${OVERLAY_UI_MAX_FRAC * overlayScale * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}

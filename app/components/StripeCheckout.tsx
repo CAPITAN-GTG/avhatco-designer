@@ -25,7 +25,13 @@ import {
 export const PAID_ORDER_PENDING_KEY = "custom-designer-paid-order-pending";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
-const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
+const isLocalhost =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+const isLiveKey = publishableKey.startsWith("pk_live_");
+const canUseStripeKey = Boolean(publishableKey) && (!isLiveKey || isHttps || isLocalhost);
+const stripePromise = canUseStripeKey ? loadStripe(publishableKey) : null;
 
 function PaymentForm({
   amountLabel,
@@ -183,6 +189,20 @@ export function StripeCheckoutModal({
             <DialogTitle>Checkout unavailable</DialogTitle>
             <DialogDescription>
               Add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY to enable card checkout.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+  if (isLiveKey && !isHttps && !isLocalhost) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Checkout unavailable</DialogTitle>
+            <DialogDescription>
+              Live Stripe checkout requires HTTPS. Use an HTTPS deployment for production keys.
             </DialogDescription>
           </DialogHeader>
         </DialogContent>

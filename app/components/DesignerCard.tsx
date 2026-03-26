@@ -15,6 +15,7 @@ import {
   type DecorationType,
 } from "@/lib/decoration";
 import { FALLBACK_BASE_IMAGES } from "./designer/overlayConstants";
+import { toast } from "react-toastify";
 
 const IMAGE_CACHE_KEY = "designer_image_cache_v1";
 const IMAGE_CACHE_DAYS = 7;
@@ -73,6 +74,28 @@ function preloadImage(src: string): Promise<void> {
   });
 }
 
+function isVectorFile(file: File): boolean {
+  const type = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+  return (
+    type === "image/svg+xml" ||
+    type === "application/svg+xml" ||
+    name.endsWith(".svg") ||
+    name.endsWith(".ai") ||
+    name.endsWith(".eps") ||
+    name.endsWith(".pdf")
+  );
+}
+
+function fileToDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("read"));
+    reader.readAsDataURL(file);
+  });
+}
+
 function readCookie(name: string): string | null {
   if (typeof document === "undefined") return null;
   const entry = document.cookie
@@ -105,12 +128,41 @@ export default function DesignerCard({
   );
   const [leatherColor, setLeatherColor] = useState<string | null>(DEFAULT_LEATHER_COLOR);
   const [dieCutShapeUrl, setDieCutShapeUrl] = useState<string | null>(null);
+  const [overlayResetKey, setOverlayResetKey] = useState(0);
 
   const setDieCutShapeFile = useCallback((file: File | null) => {
-    setDieCutShapeUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return file ? URL.createObjectURL(file) : null;
-    });
+    if (!file) {
+      setDieCutShapeUrl(null);
+      return;
+    }
+
+    if (isVectorFile(file)) {
+      void fileToDataUrl(file).then((dataUrl) => setDieCutShapeUrl(dataUrl));
+      return;
+    }
+
+    void (async () => {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const message = await res.text();
+          throw new Error(message || "Background removal failed");
+        }
+
+        const pngBlob = await res.blob();
+        const pngDataUrl = await fileToDataUrl(pngBlob);
+        setDieCutShapeUrl(pngDataUrl);
+      } catch {
+        toast.error("Could not remove background from the uploaded shape image.");
+      }
+    })();
   }, []);
 
   const leatherPatchImageSrc = useMemo(() => {
@@ -128,10 +180,7 @@ export default function DesignerCard({
     if (next === "embroidery") {
       setLeatherOutline(null);
       setLeatherColor(DEFAULT_LEATHER_COLOR);
-      setDieCutShapeUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
+      setDieCutShapeUrl(null);
     }
     if (next === "leather") {
       setLeatherColor((c) => c ?? DEFAULT_LEATHER_COLOR);
@@ -139,12 +188,19 @@ export default function DesignerCard({
     }
   }, []);
 
+  const resetDesignerAfterSubmit = useCallback(() => {
+    setProductId("");
+    setDecorationType("embroidery");
+    setLeatherOutline(DEFAULT_LEATHER_OUTLINE);
+    setLeatherColor(DEFAULT_LEATHER_COLOR);
+    setDieCutShapeUrl(null);
+    setLocationCount(0);
+    setOverlayResetKey((k) => k + 1);
+  }, []);
+
   useEffect(() => {
     if (decorationType !== "leather" || leatherOutline !== "die cut") {
-      setDieCutShapeUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
+      setDieCutShapeUrl(null);
     }
   }, [decorationType, leatherOutline]);
 
@@ -250,6 +306,7 @@ export default function DesignerCard({
     <div className="w-full flex flex-col xl:flex-row xl:items-stretch max-sm:rounded-none sm:rounded-xl sm:overflow-hidden sm:border sm:border-[#e5e7eb] xl:border xl:border-[#e5e7eb] xl:rounded-xl">
       <div className="min-w-0 flex-1 bg-white border border-[#e5e7eb] border-x-0 border-t-0 sm:border sm:border-[#e5e7eb] rounded-none sm:rounded-t-xl xl:rounded-t-none xl:rounded-l-xl xl:rounded-tr-none xl:border-r-0 p-4 sm:p-5 lg:p-6">
         <ImageOverlaySection
+          key={overlayResetKey}
           ref={overlaySectionRef}
           baseImages={previewBaseImages}
           onLocationsChange={setLocationCount}
@@ -275,6 +332,7 @@ export default function DesignerCard({
             onLeatherColorChange={setLeatherColor}
             dieCutShapeUrl={dieCutShapeUrl}
             onDieCutShapeFile={setDieCutShapeFile}
+            onOrderSubmitted={resetDesignerAfterSubmit}
           />
       </div>
     </div>

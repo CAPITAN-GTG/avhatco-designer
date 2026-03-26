@@ -31,7 +31,7 @@ export type SendOrderEmailsInput = {
 };
 
 function dataUrlToBuffer(dataUrl: string): Buffer | null {
-  const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
+  const match = dataUrl.match(/^data:[^;]+;base64,(.+)$/i);
   if (!match) return null;
   try {
     return Buffer.from(match[1], "base64");
@@ -41,9 +41,20 @@ function dataUrlToBuffer(dataUrl: string): Buffer | null {
 }
 
 function dieCutShapeAttachmentName(dataUrl: string): string {
-  const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,/i);
+  const m = dataUrl.match(/^data:([^;]+);base64,/i);
   if (!m) return "die-cut-patch-shape.bin";
-  const ext = m[1].toLowerCase() === "jpeg" ? "jpg" : m[1].toLowerCase();
+  const mime = m[1].toLowerCase();
+  const extByMime: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "application/pdf": "pdf",
+    "application/postscript": "eps",
+    "application/illustrator": "ai",
+  };
+  const ext = extByMime[mime] ?? "bin";
   return `die-cut-patch-shape.${ext}`;
 }
 
@@ -55,11 +66,14 @@ async function deliverOrderEmails(
   if (!input.productId || !input.productTitle) {
     return { success: false, error: "Please select a product" };
   }
+  const requiresDesignImage =
+    input.decorationType === "embroidery" ||
+    (input.decorationType === "leather" && input.leatherOutline !== "die cut");
   const hasDesignImage =
     input.decorationType === "leather"
       ? Boolean(input.frontDesignOnlyDataUrl)
       : Boolean(input.frontImageDataUrl || input.sideImageDataUrl);
-  if (!hasDesignImage) {
+  if (requiresDesignImage && !hasDesignImage) {
     return {
       success: false,
       error:
@@ -149,11 +163,11 @@ async function deliverOrderEmails(
     const businessAttachments: EmailAttachment[] = [...compositeAttachments];
     if (input.frontDesignOnlyDataUrl) {
       const buf = dataUrlToBuffer(input.frontDesignOnlyDataUrl);
-      if (buf) businessAttachments.push({ filename: "design-front-artwork.jpg", content: buf });
+      if (buf) businessAttachments.push({ filename: "design-front-artwork.png", content: buf });
     }
     if (input.sideDesignOnlyDataUrl) {
       const buf = dataUrlToBuffer(input.sideDesignOnlyDataUrl);
-      if (buf) businessAttachments.push({ filename: "design-side-artwork.jpg", content: buf });
+      if (buf) businessAttachments.push({ filename: "design-side-artwork.png", content: buf });
     }
     if (input.dieCutShapeHighResDataUrl) {
       const buf = dataUrlToBuffer(input.dieCutShapeHighResDataUrl);

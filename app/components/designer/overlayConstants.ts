@@ -35,7 +35,7 @@ export const DIE_CUT_LEATHER_OVERLAY_BLEED_PX = 2;
 export const LEATHER_PATCH_FULLSCREEN_NUDGE_PX = LEATHER_PATCH_PREVIEW_NUDGE_PX;
 
 export const EXPORT_WIDTH = 400;
-export const EXPORT_HEIGHT = 300;
+export const EXPORT_HEIGHT = 400;
 /** Max longest side for "design only" export (user's artwork for download). */
 export const DESIGN_ONLY_MAX_PX = 1200;
 export const DESIGN_ONLY_JPEG_QUALITY = 0.85;

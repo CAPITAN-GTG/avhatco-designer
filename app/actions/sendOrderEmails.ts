@@ -22,6 +22,7 @@ export type SendOrderEmailsInput = {
   frontDesignOnlyDataUrl?: string;
   sideDesignOnlyDataUrl?: string;
   decorationType?: "embroidery" | "leather";
+  /** @deprecated Kept for older payloads; embroidery is implied by decoration type. */
   embroideryPreference?: "yes" | "no";
   leatherOutline?: string;
   leatherColor?: string;
@@ -45,8 +46,18 @@ async function deliverOrderEmails(
   if (!input.productId || !input.productTitle) {
     return { success: false, error: "Please select a product" };
   }
-  if (!input.frontImageDataUrl && !input.sideImageDataUrl) {
-    return { success: false, error: "Please upload at least one design image (front or side)" };
+  const hasDesignImage =
+    input.decorationType === "leather"
+      ? Boolean(input.frontDesignOnlyDataUrl)
+      : Boolean(input.frontImageDataUrl || input.sideImageDataUrl);
+  if (!hasDesignImage) {
+    return {
+      success: false,
+      error:
+        input.decorationType === "leather"
+          ? "Please upload a front design image for your leatherette patch."
+          : "Please upload at least one design image (front or side)",
+    };
   }
 
   try {
@@ -57,7 +68,8 @@ async function deliverOrderEmails(
 
     const MIN_QUANTITY = 12;
     const qty = Math.max(MIN_QUANTITY, input.quantity ?? MIN_QUANTITY);
-    const isDoubleLocation = (input.locationsCount ?? 0) >= 2;
+    const isDoubleLocation =
+      input.decorationType !== "leather" && (input.locationsCount ?? 0) >= 2;
     const priceReasonText = isDoubleLocation
       ? " (Price is doubled because the design is applied to both front and side.)"
       : "";
@@ -70,10 +82,10 @@ async function deliverOrderEmails(
 
     const trimmedPhone = input.phone?.trim();
 
-    // Single decoration block: either embroidery OR leather (never both)
+    // Single decoration block: either embroidery OR leatherette (not DTF)
     const decorationText =
-      input.decorationType === "embroidery" && input.embroideryPreference
-        ? `Decoration: Embroidery\nWanted: ${input.embroideryPreference === "yes" ? "Yes" : "No"}\n`
+      input.decorationType === "embroidery"
+        ? "Decoration: Embroidery\n"
         : input.decorationType === "leather"
           ? [
               "Decoration: Leatherette patch\n",
@@ -83,8 +95,8 @@ async function deliverOrderEmails(
           : "";
 
     const decorationHtml =
-      input.decorationType === "embroidery" && input.embroideryPreference
-        ? `<section style="margin:1em 0"><strong>Decoration</strong><br/>Type: Embroidery<br/>Wanted: ${input.embroideryPreference === "yes" ? "Yes" : "No"}</section>`
+      input.decorationType === "embroidery"
+        ? `<section style="margin:1em 0"><strong>Decoration</strong><br/>Type: Embroidery</section>`
         : input.decorationType === "leather"
           ? `<section style="margin:1em 0"><strong>Decoration</strong><br/>Type: Leatherette patch${input.leatherOutline ? `<br/>Outline: ${input.leatherOutline}` : ""}${input.leatherColor ? `<br/>Color: ${input.leatherColor}` : ""}</section>`
           : "";
@@ -173,11 +185,12 @@ async function deliverOrderEmails(
       footer: "padding:20px 28px;font-size:13px;color:#6b7280;background:#f9fafb;border-top:1px solid #e5e7eb;",
     };
 
-    const decorationInline = input.decorationType === "embroidery" && input.embroideryPreference
-      ? `Type: Embroidery · Wanted: ${input.embroideryPreference === "yes" ? "Yes" : "No"}`
-      : input.decorationType === "leather"
-        ? `Type: Leatherette patch${input.leatherOutline ? ` · Outline: ${input.leatherOutline}` : ""}${input.leatherColor ? ` · Color: ${input.leatherColor}` : ""}`
-        : "";
+    const decorationInline =
+      input.decorationType === "embroidery"
+        ? "Type: Embroidery"
+        : input.decorationType === "leather"
+          ? `Type: Leatherette patch${input.leatherOutline ? ` · Outline: ${input.leatherOutline}` : ""}${input.leatherColor ? ` · Color: ${input.leatherColor}` : ""}`
+          : "";
 
     const customerHtml = `
 <!DOCTYPE html>
@@ -274,6 +287,7 @@ export async function sendOrderEmailsAfterPayment(
     quantity: input.quantity,
     locationsCount: input.locationsCount,
     currencyCode: input.currencyCode,
+    decorationType: input.decorationType,
   });
   if (!verified.ok) {
     return { success: false, error: verified.error };

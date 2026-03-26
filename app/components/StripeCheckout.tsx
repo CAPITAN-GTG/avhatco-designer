@@ -11,6 +11,7 @@ import {
 import { toast } from "react-toastify";
 import { sendOrderEmailsAfterPayment } from "../actions/sendOrderEmails";
 import type { SendOrderEmailsInput } from "../actions/sendOrderEmails";
+import type { DecorationType } from "@/lib/decoration";
 import { computeOrderTotal, parseOrderQuantity } from "@/lib/pricing";
 import {
   Dialog,
@@ -103,6 +104,7 @@ export function StripeCheckoutModal({
   onOpenChange,
   quantity,
   locations,
+  decorationType,
   currencyCode,
   orderPayload,
   onOrderComplete,
@@ -111,6 +113,7 @@ export function StripeCheckoutModal({
   onOpenChange: (open: boolean) => void;
   quantity: string;
   locations: number;
+  decorationType: DecorationType;
   currencyCode: string;
   orderPayload: SendOrderEmailsInput | null;
   onOrderComplete: () => void;
@@ -132,7 +135,12 @@ export function StripeCheckoutModal({
         const res = await fetch("/api/create-payment-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quantity, locations, currency: currencyCode }),
+          body: JSON.stringify({
+            quantity,
+            locations,
+            currency: currencyCode,
+            decorationType,
+          }),
         });
         const data = (await res.json()) as { clientSecret?: string; error?: string };
         if (!res.ok) {
@@ -154,10 +162,10 @@ export function StripeCheckoutModal({
     return () => {
       cancelled = true;
     };
-  }, [open, orderPayload, quantity, locations, currencyCode, onOpenChange]);
+  }, [open, orderPayload, quantity, locations, decorationType, currencyCode, onOpenChange]);
 
   const qty = parseOrderQuantity(quantity);
-  const { total } = computeOrderTotal(qty, locations);
+  const { total } = computeOrderTotal(qty, locations, decorationType);
   const amountLabel = `${currencyCode} ${total.toFixed(2)}`;
 
   function handlePaymentDone(success: boolean) {

@@ -30,3 +30,46 @@ h4 {
     sans-serif;
   letter-spacing: -0.03em;
 }
+
+/* Leatherette bottom sheets (mobile) */
+@keyframes leather-sheet-slide-up {
+  from {
+    transform: translate3d(0, 100%, 0);
+    opacity: 0.92;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes leather-overlay-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.leather-sheet-overlay[data-state="open"] {
+  animation: leather-overlay-fade-in 0.28s ease-out;
+}
+
+.leather-sheet-content[data-state="open"] {
+  animation: leather-sheet-slide-up 0.42s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Leatherette dropdowns (desktop) — opacity only so Radix position transforms stay intact */
+@keyframes leather-dropdown-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.leather-dropdown-content[data-state="open"] {
+  animation: leather-dropdown-fade-in 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}

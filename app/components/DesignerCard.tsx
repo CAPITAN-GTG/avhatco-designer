@@ -6,6 +6,15 @@ import ImageOverlaySection, {
 } from "./ImageOverlaySection";
 import OrderForm from "./OrderForm";
 import type { ShopifyProduct } from "../lib/shopify";
+import {
+  DEFAULT_LEATHER_COLOR,
+  DEFAULT_LEATHER_OUTLINE,
+  LEATHER_PATCH_TEXTURE_URLS,
+  PATCH_SHAPES,
+  leatherPatchTextureSrc,
+  type DecorationType,
+} from "@/lib/decoration";
+import { FALLBACK_BASE_IMAGES } from "./designer/overlayConstants";
 
 const IMAGE_CACHE_KEY = "designer_image_cache_v1";
 const IMAGE_CACHE_DAYS = 7;
@@ -29,6 +38,21 @@ function collectProductImageUrls(products: ShopifyProduct[]): string[] {
     }
   }
   return [...urls];
+}
+
+/** First-paint: product photos + local fallbacks. Leather/shape assets load after. */
+function criticalImageUrls(products: ShopifyProduct[]): string[] {
+  const fromProducts = collectProductImageUrls(products);
+  return [...new Set([...fromProducts, "/front.webp", "/side.webp"])];
+}
+
+function deferredDecorationAssetUrls(): string[] {
+  return [
+    ...new Set([
+      ...LEATHER_PATCH_TEXTURE_URLS,
+      ...PATCH_SHAPES.map((s) => s.image),
+    ]),
+  ];
 }
 
 function hashText(input: string): string {
@@ -75,11 +99,52 @@ export default function DesignerCard({
   const [loadedCount, setLoadedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   const [locationCount, setLocationCount] = useState(0);
+  const [decorationType, setDecorationType] = useState<DecorationType>("embroidery");
+  const [leatherOutline, setLeatherOutline] = useState<string | null>(
+    DEFAULT_LEATHER_OUTLINE
+  );
+  const [leatherColor, setLeatherColor] = useState<string | null>(DEFAULT_LEATHER_COLOR);
+
+  const leatherPatchImageSrc = useMemo(
+    () =>
+      decorationType === "leather"
+        ? leatherPatchTextureSrc(
+            leatherOutline ?? DEFAULT_LEATHER_OUTLINE,
+            leatherColor
+          )
+        : null,
+    [decorationType, leatherOutline, leatherColor]
+  );
+
+  const handleDecorationTypeChange = useCallback((next: DecorationType) => {
+    setDecorationType(next);
+    if (next === "embroidery") {
+      setLeatherOutline(null);
+      setLeatherColor(DEFAULT_LEATHER_COLOR);
+    }
+    if (next === "leather") {
+      setLeatherColor((c) => c ?? DEFAULT_LEATHER_COLOR);
+      setLeatherOutline((o) => o ?? DEFAULT_LEATHER_OUTLINE);
+    }
+  }, []);
+
   const selectedProduct = productId
     ? (products.find((p) => p.id === productId) ?? null)
     : null;
   const baseImages = productImages(selectedProduct);
-  const imageUrls = useMemo(() => collectProductImageUrls(products), [products]);
+  /** Leatherette alignment is tuned for the default hat; embroidery uses the selected product photos. */
+  const previewBaseImages = useMemo(() => {
+    if (decorationType === "leather") {
+      return {
+        front: FALLBACK_BASE_IMAGES.front,
+        side: FALLBACK_BASE_IMAGES.side,
+      };
+    }
+    return baseImages;
+  }, [decorationType, baseImages]);
+  const imageUrls = useMemo(() => {
+    return [...new Set([...criticalImageUrls(products), ...deferredDecorationAssetUrls()])];
+  }, [products]);
   const imageSignature = useMemo(() => hashText(imageUrls.join("|")), [imageUrls]);
 
   const getPreviewImages = useCallback(async () => {
@@ -107,25 +172,31 @@ export default function DesignerCard({
     }
 
     setReady(false);
+    const critical = criticalImageUrls(products);
+    const deferred = deferredDecorationAssetUrls();
     setLoadedCount(0);
-    setTotalCount(imageUrls.length);
+    setTotalCount(critical.length);
 
     const run = async () => {
-      let loaded = 0;
-      for (const url of imageUrls) {
-        await preloadImage(url);
-        loaded += 1;
-        if (!cancelled) setLoadedCount(loaded);
-      }
+      let done = 0;
+      await Promise.all(
+        critical.map(async (url) => {
+          await preloadImage(url);
+          done += 1;
+          if (!cancelled) setLoadedCount(done);
+        })
+      );
+      if (cancelled) return;
+      setReady(true);
+      await Promise.all(deferred.map((url) => preloadImage(url)));
       if (cancelled) return;
       writeCookie(IMAGE_CACHE_KEY, imageSignature, IMAGE_CACHE_DAYS);
       if (typeof window !== "undefined") {
         window.localStorage.setItem(IMAGE_CACHE_KEY, imageSignature);
       }
-      setReady(true);
     };
 
-    run();
+    void run();
 
     return () => {
       cancelled = true;
@@ -137,7 +208,7 @@ export default function DesignerCard({
 
   if (!ready) {
     return (
-      <div className="rounded-2xl bg-white border border-[#e5e7eb] overflow-hidden p-5 sm:p-7">
+      <div className="rounded-xl bg-white border border-[#e5e7eb] p-4 sm:p-5 max-w-lg">
         <h2 className="text-base font-medium tracking-tight text-[#111827]">Loading product images</h2>
         <p className="text-sm text-[#4b5563] mt-1">
           Preparing the designer for faster interactions.
@@ -156,25 +227,32 @@ export default function DesignerCard({
   }
 
   return (
-    <div className="rounded-2xl bg-white border border-[#e5e7eb] overflow-hidden">
-      <div className="flex flex-col xl:flex-row">
-        <div className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
-          <ImageOverlaySection
-            ref={overlaySectionRef}
-            baseImages={baseImages}
-            onLocationsChange={setLocationCount}
-          />
-        </div>
+    <div className="w-full flex flex-col xl:flex-row xl:items-stretch max-sm:rounded-none sm:rounded-xl sm:overflow-hidden sm:border sm:border-[#e5e7eb] xl:border xl:border-[#e5e7eb] xl:rounded-xl">
+      <div className="min-w-0 flex-1 bg-white border border-[#e5e7eb] border-x-0 border-t-0 sm:border sm:border-[#e5e7eb] rounded-none sm:rounded-t-xl xl:rounded-t-none xl:rounded-l-xl xl:rounded-tr-none xl:border-r-0 p-4 sm:p-5 lg:p-6">
+        <ImageOverlaySection
+          ref={overlaySectionRef}
+          baseImages={previewBaseImages}
+          onLocationsChange={setLocationCount}
+          decorationType={decorationType}
+          leatherPatchImageSrc={leatherPatchImageSrc}
+          leatherOutline={leatherOutline}
+        />
+      </div>
 
-        <div className="border-t border-[#e5e7eb] xl:border-t-0 xl:border-l xl:w-[420px] shrink-0 p-4 sm:p-6 lg:p-8 bg-[#fcfcfd]">
-          <OrderForm
+      <div className="w-full xl:w-[min(100%,380px)] xl:shrink-0 border border-zinc-700 border-x-0 border-t-0 sm:border sm:border-zinc-700 sm:border-t-0 xl:border-t rounded-none sm:rounded-b-xl xl:rounded-b-none xl:rounded-r-xl xl:rounded-tl-none bg-zinc-900 p-4 sm:p-5 lg:p-6 text-zinc-100 ring-1 ring-inset ring-white/[0.06]">
+        <OrderForm
             products={products}
             productId={productId}
             setProductId={setProductId}
             getPreviewImages={getPreviewImages}
             locations={locationCount}
+            decorationType={decorationType}
+            onDecorationTypeChange={handleDecorationTypeChange}
+            leatherOutline={leatherOutline}
+            onLeatherOutlineChange={setLeatherOutline}
+            leatherColor={leatherColor}
+            onLeatherColorChange={setLeatherColor}
           />
-        </div>
       </div>
     </div>
   );

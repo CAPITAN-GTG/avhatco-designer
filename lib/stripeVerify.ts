@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import type { DecorationType } from "@/lib/decoration";
 import {
   computeOrderTotal,
   MIN_QUANTITY,
@@ -8,7 +9,12 @@ import {
 
 export async function assertPaidOrderMatchesPaymentIntent(
   paymentIntentId: string,
-  input: { quantity?: number; locationsCount?: number; currencyCode: string }
+  input: {
+    quantity?: number;
+    locationsCount?: number;
+    currencyCode: string;
+    decorationType?: DecorationType;
+  }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) {
@@ -17,7 +23,8 @@ export async function assertPaidOrderMatchesPaymentIntent(
 
   const qty = parseOrderQuantity(input.quantity ?? MIN_QUANTITY);
   const loc = input.locationsCount ?? 0;
-  const { total } = computeOrderTotal(qty, loc);
+  const kind = input.decorationType ?? "embroidery";
+  const { total } = computeOrderTotal(qty, loc, kind);
   const expectedAmount = toStripeAmount(total, input.currencyCode);
 
   const stripe = new Stripe(secret);

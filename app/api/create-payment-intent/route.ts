@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import type { DecorationType } from "@/lib/decoration";
 import {
   computeOrderTotal,
   MIN_QUANTITY,
@@ -16,7 +17,12 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: { quantity?: unknown; locations?: unknown; currency?: unknown };
+  let body: {
+    quantity?: unknown;
+    locations?: unknown;
+    currency?: unknown;
+    decorationType?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -33,8 +39,11 @@ export async function POST(req: Request) {
       : 0;
   const currencyRaw = typeof body.currency === "string" ? body.currency.trim() : "usd";
   const currency = currencyRaw.toLowerCase().slice(0, 3) || "usd";
+  const decorationRaw = body.decorationType;
+  const decorationType: DecorationType =
+    decorationRaw === "leather" ? "leather" : "embroidery";
 
-  const { total } = computeOrderTotal(qty, locations);
+  const { total } = computeOrderTotal(qty, locations, decorationType);
   const amount = toStripeAmount(total, currency);
 
   if (amount < 50) {
@@ -51,6 +60,7 @@ export async function POST(req: Request) {
       metadata: {
         quantity: String(qty),
         locations: String(locations),
+        decorationType,
       },
     });
 

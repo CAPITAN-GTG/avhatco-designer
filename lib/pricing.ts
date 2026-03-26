@@ -1,8 +1,10 @@
+import type { DecorationType } from "@/lib/decoration";
+
 export const SETUP_FEE = 35;
 export const MIN_QUANTITY = 12;
 
-/** Quantity tiers: [min quantity, price per unit]. Descending by min qty. */
-export const QUANTITY_TIERS: [number, number][] = [
+/** Embroidery: quantity tiers [min quantity, price per unit]. Descending by min qty. */
+export const EMBROIDERY_QUANTITY_TIERS: [number, number][] = [
   [144, 14],
   [96, 15],
   [48, 16],
@@ -10,9 +12,23 @@ export const QUANTITY_TIERS: [number, number][] = [
   [12, 20],
 ];
 
-export function getUnitPriceForQuantity(qty: number): number {
-  const tier = QUANTITY_TIERS.find(([min]) => qty >= min);
-  return tier ? tier[1] : QUANTITY_TIERS[QUANTITY_TIERS.length - 1]![1];
+/** Leatherette patch: quantity tiers [min quantity, price per unit]. Descending by min qty. */
+export const LEATHERETTE_QUANTITY_TIERS: [number, number][] = [
+  [144, 15],
+  [96, 17],
+  [48, 18],
+  [24, 20],
+  [12, 22],
+];
+
+export function getUnitPriceForQuantity(
+  qty: number,
+  kind: DecorationType = "embroidery"
+): number {
+  const tiers =
+    kind === "leather" ? LEATHERETTE_QUANTITY_TIERS : EMBROIDERY_QUANTITY_TIERS;
+  const tier = tiers.find(([min]) => qty >= min);
+  return tier ? tier[1] : tiers[tiers.length - 1]![1];
 }
 
 /** Matches OrderForm quantity parsing. */
@@ -30,10 +46,12 @@ export function parseOrderQuantity(quantity: string | number): number {
 
 export function computeOrderTotal(
   qty: number,
-  locations: number
+  locations: number,
+  decorationType: DecorationType = "embroidery"
 ): { subtotal: number; total: number; unitPrice: number } {
-  const unitPrice = getUnitPriceForQuantity(qty);
-  const locationMultiplier = locations >= 2 ? 2 : 1;
+  const unitPrice = getUnitPriceForQuantity(qty, decorationType);
+  const locationMultiplier =
+    decorationType === "leather" ? 1 : locations >= 2 ? 2 : 1;
   const subtotal = unitPrice * qty * locationMultiplier;
   const total = subtotal + SETUP_FEE;
   return { subtotal, total, unitPrice };

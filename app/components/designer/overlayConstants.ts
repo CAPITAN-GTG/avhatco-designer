@@ -46,7 +46,7 @@ export const NUDGE_STEP_FINE = 0.004;
 
 /** Recommended artwork hint (UX copy). */
 export const ARTWORK_FILE_HINT =
-  "PNG, JPG, or WebP · about 300×300 px or larger recommended for best results";
+  "PNG, JPG, or WebP · about 300×300 px or larger · after upload, confirm background removal before the design appears";
 
 /** Arrow pad: move design by this many CSS pixels per step. */
 export const DESIGN_NUDGE_PIXEL_PX = 1;

@@ -25,7 +25,9 @@ import {
   type Slot,
 } from "./designer/overlayConstants";
 import { loadImage } from "./designer/overlayCanvas";
+import { BackgroundRemovalModal } from "./designer/BackgroundRemovalModal";
 import { OverlaySlot } from "./designer/OverlaySlot";
+import { imageFileToPngDataUrl } from "@/lib/overlayBackgroundRemoval";
 import { toPng } from "html-to-image";
 import {
   cloneSlot,
@@ -98,39 +100,6 @@ async function objectUrlToEmailSafeDataUrl(url: string): Promise<string | undefi
   }
 }
 
-async function fileToPngDataUrl(file: File): Promise<string | null> {
-  const sourceDataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error("read"));
-    reader.readAsDataURL(file);
-  }).catch(() => null);
-  if (!sourceDataUrl) return null;
-  try {
-    const img = await loadImage(sourceDataUrl);
-    const width = img.naturalWidth || 1;
-    const height = img.naturalHeight || 1;
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(img, 0, 0, width, height);
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((result) => resolve(result), "image/png");
-    });
-    if (!blob) return null;
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error("read"));
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return sourceDataUrl;
-  }
-}
-
 const ImageOverlaySection = forwardRef<
   ImageOverlaySectionHandle,
   {
@@ -172,6 +141,11 @@ const ImageOverlaySection = forwardRef<
 
   const [overlayFront, setOverlayFront] = useState<string | null>(null);
   const [overlaySide, setOverlaySide] = useState<string | null>(null);
+  /** Artwork upload awaiting background-removal confirmation. */
+  const [pendingOverlay, setPendingOverlay] = useState<{
+    slot: Slot;
+    dataUrl: string;
+  } | null>(null);
   const [dieCutScale, setDieCutScale] = useState(DIE_CUT_SCALE_DEFAULT);
   const [patchPosition, setPatchPosition] =
     useState<NormalizedPosition>(CENTER_POSITION);
@@ -196,18 +170,32 @@ const ImageOverlaySection = forwardRef<
   const patchSide = sideHistory.patchPresent;
   const clearSideHist = sideHistory.clearHistory;
 
+  const commitOverlayAfterRemoval = useCallback(
+    (slot: Slot, dataUrl: string) => {
+      const setter = slot === "front" ? setOverlayFront : setOverlaySide;
+      setter(dataUrl);
+      if (slot === "front") {
+        patchFront({
+          position: CENTER_POSITION,
+          scale: OVERLAY_SCALE_DEFAULT,
+        });
+        clearFrontHist();
+      } else {
+        patchSide({
+          position: CENTER_POSITION,
+          scale: OVERLAY_SCALE_DEFAULT,
+        });
+        clearSideHist();
+      }
+    },
+    [patchFront, clearFrontHist, patchSide, clearSideHist]
+  );
+
   const setOverlay = useCallback(
     (slot: Slot, file: File | null) => {
-      const setter = slot === "front" ? setOverlayFront : setOverlaySide;
       if (!file) {
+        const setter = slot === "front" ? setOverlayFront : setOverlaySide;
         setter(null);
-      } else {
-        void (async () => {
-          const pngUrl = await fileToPngDataUrl(file);
-          setter(pngUrl);
-        })();
-      }
-      if (!file) {
         if (slot === "front") {
           patchFront({
             position: CENTER_POSITION,
@@ -221,9 +209,25 @@ const ImageOverlaySection = forwardRef<
           });
           clearSideHist();
         }
+        return;
       }
+      void (async () => {
+        const pngUrl = await imageFileToPngDataUrl(file);
+        if (!pngUrl) return;
+        setPendingOverlay({ slot, dataUrl: pngUrl });
+      })();
     },
     [patchFront, clearFrontHist, patchSide, clearSideHist]
+  );
+
+  const onBackgroundRemovalConfirm = useCallback(
+    (processedDataUrl: string) => {
+      if (!pendingOverlay) return;
+      const { slot } = pendingOverlay;
+      setPendingOverlay(null);
+      commitOverlayAfterRemoval(slot, processedDataUrl);
+    },
+    [pendingOverlay, commitOverlayAfterRemoval]
   );
 
   useEffect(() => {
@@ -581,7 +585,6 @@ const ImageOverlaySection = forwardRef<
           onScalePointerUp={onFrontScalePointerUp}
           onClear={clearOverlay("front")}
           onFile={handleFile("front")}
-          onOverlayProcessed={setOverlayFront}
           decorationType={decorationType}
           leatherColor={leatherColor}
           slotActions={overlayFront ? frontActions : undefined}
@@ -603,7 +606,6 @@ const ImageOverlaySection = forwardRef<
             onScalePointerUp={onSideScalePointerUp}
             onClear={clearOverlay("side")}
             onFile={handleFile("side")}
-            onOverlayProcessed={setOverlaySide}
             decorationType={decorationType}
             leatherColor={leatherColor}
             slotActions={overlaySide ? sideActions : undefined}
@@ -721,6 +723,16 @@ const ImageOverlaySection = forwardRef<
           />
         )}
       </div>
+
+      <BackgroundRemovalModal
+        open={pendingOverlay !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingOverlay(null);
+        }}
+        previewDataUrl={pendingOverlay?.dataUrl ?? null}
+        onConfirm={onBackgroundRemovalConfirm}
+        title="Artwork — remove background"
+      />
     </div>
   );
 });

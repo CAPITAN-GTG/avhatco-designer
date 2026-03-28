@@ -14,7 +14,9 @@ import {
   leatherPatchTextureSrc,
   type DecorationType,
 } from "@/lib/decoration";
+import { BackgroundRemovalModal } from "./designer/BackgroundRemovalModal";
 import { FALLBACK_BASE_IMAGES } from "./designer/overlayConstants";
+import { imageFileToPngDataUrl } from "@/lib/overlayBackgroundRemoval";
 import { toast } from "react-toastify";
 
 const IMAGE_CACHE_KEY = "designer_image_cache_v1";
@@ -128,11 +130,14 @@ export default function DesignerCard({
   );
   const [leatherColor, setLeatherColor] = useState<string | null>(DEFAULT_LEATHER_COLOR);
   const [dieCutShapeUrl, setDieCutShapeUrl] = useState<string | null>(null);
+  /** Raster die-cut file awaiting the same background-removal step as artwork. */
+  const [dieCutPendingDataUrl, setDieCutPendingDataUrl] = useState<string | null>(null);
   const [overlayResetKey, setOverlayResetKey] = useState(0);
 
   const setDieCutShapeFile = useCallback((file: File | null) => {
     if (!file) {
       setDieCutShapeUrl(null);
+      setDieCutPendingDataUrl(null);
       return;
     }
 
@@ -142,26 +147,12 @@ export default function DesignerCard({
     }
 
     void (async () => {
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const message = await res.text();
-          throw new Error(message || "Background removal failed");
-        }
-
-        const pngBlob = await res.blob();
-        const pngDataUrl = await fileToDataUrl(pngBlob);
-        setDieCutShapeUrl(pngDataUrl);
-      } catch {
-        toast.error("Could not remove background from the uploaded shape image.");
+      const pngUrl = await imageFileToPngDataUrl(file);
+      if (!pngUrl) {
+        toast.error("Could not read the uploaded shape image.");
+        return;
       }
+      setDieCutPendingDataUrl(pngUrl);
     })();
   }, []);
 
@@ -181,6 +172,7 @@ export default function DesignerCard({
       setLeatherOutline(null);
       setLeatherColor(DEFAULT_LEATHER_COLOR);
       setDieCutShapeUrl(null);
+      setDieCutPendingDataUrl(null);
     }
     if (next === "leather") {
       setLeatherColor((c) => c ?? DEFAULT_LEATHER_COLOR);
@@ -194,6 +186,7 @@ export default function DesignerCard({
     setLeatherOutline(DEFAULT_LEATHER_OUTLINE);
     setLeatherColor(DEFAULT_LEATHER_COLOR);
     setDieCutShapeUrl(null);
+    setDieCutPendingDataUrl(null);
     setLocationCount(0);
     setOverlayResetKey((k) => k + 1);
   }, []);
@@ -201,6 +194,7 @@ export default function DesignerCard({
   useEffect(() => {
     if (decorationType !== "leather" || leatherOutline !== "die cut") {
       setDieCutShapeUrl(null);
+      setDieCutPendingDataUrl(null);
     }
   }, [decorationType, leatherOutline]);
 
@@ -303,6 +297,20 @@ export default function DesignerCard({
   }
 
   return (
+    <>
+    <BackgroundRemovalModal
+      open={dieCutPendingDataUrl !== null}
+      onOpenChange={(o) => {
+        if (!o) setDieCutPendingDataUrl(null);
+      }}
+      previewDataUrl={dieCutPendingDataUrl}
+      onConfirm={(url) => {
+        setDieCutShapeUrl(url);
+        setDieCutPendingDataUrl(null);
+      }}
+      title="Die-cut shape — remove background"
+      description="Choose which color to make transparent (default white), same as for artwork. This outline is used in the preview and in your order."
+    />
     <div className="w-full flex flex-col xl:flex-row xl:items-stretch max-sm:rounded-none sm:rounded-xl sm:overflow-hidden sm:border sm:border-[#e5e7eb] xl:border xl:border-[#e5e7eb] xl:rounded-xl">
       <div className="min-w-0 flex-1 bg-white border border-[#e5e7eb] border-x-0 border-t-0 sm:border sm:border-[#e5e7eb] rounded-none sm:rounded-t-xl xl:rounded-t-none xl:rounded-l-xl xl:rounded-tr-none xl:border-r-0 p-4 sm:p-5 lg:p-6">
         <ImageOverlaySection
@@ -337,5 +345,6 @@ export default function DesignerCard({
           />
       </div>
     </div>
+    </>
   );
 }

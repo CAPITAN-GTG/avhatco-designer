@@ -251,7 +251,6 @@ export function OverlaySlot({
   onScalePointerUp,
   onClear,
   onFile,
-  onOverlayProcessed,
   decorationType = "embroidery",
   leatherColor,
   /** Undo/redo/copy — bottom bar, right-aligned. */
@@ -283,7 +282,6 @@ export function OverlaySlot({
   onScalePointerUp: () => void;
   onClear: () => void;
   onFile: (file: File) => void;
-  onOverlayProcessed?: (dataUrl: string) => void;
   decorationType?: DecorationType;
   leatherColor?: string | null;
   slotActions?: React.ReactNode;
@@ -622,70 +620,6 @@ export function OverlaySlot({
   );
 
   const [showFullScreen, setShowFullScreen] = useState(false);
-  const [removeColorHex, setRemoveColorHex] = useState("#ffffff");
-  const [removeTolerance, setRemoveTolerance] = useState(42);
-  const [removeBusy, setRemoveBusy] = useState(false);
-
-  const removeSelectedColorFromOverlay = useCallback(async () => {
-    if (!overlayUrl || !onOverlayProcessed) return;
-    setRemoveBusy(true);
-    try {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("image-load"));
-        img.src = overlayUrl;
-      });
-      const width = img.naturalWidth || 1;
-      const height = img.naturalHeight || 1;
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0, width, height);
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const data = imageData.data;
-      const hex = removeColorHex.replace("#", "");
-      const targetR = Number.parseInt(hex.slice(0, 2), 16) || 255;
-      const targetG = Number.parseInt(hex.slice(2, 4), 16) || 255;
-      const targetB = Number.parseInt(hex.slice(4, 6), 16) || 255;
-      const feather = 16;
-      const softStart = Math.max(0, removeTolerance - feather);
-
-      for (let i = 0; i < data.length; i += 4) {
-        const dr = data[i] - targetR;
-        const dg = data[i + 1] - targetG;
-        const db = data[i + 2] - targetB;
-        const distance = Math.sqrt(dr * dr + dg * dg + db * db);
-        if (distance <= softStart) {
-          data[i + 3] = 0;
-          continue;
-        }
-        if (distance >= removeTolerance) {
-          continue;
-        }
-        const keep = (distance - softStart) / Math.max(1, removeTolerance - softStart);
-        data[i + 3] = Math.round(data[i + 3] * keep);
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob((result) => resolve(result), "image/png");
-      });
-      if (!blob) return;
-      const pngDataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("read"));
-        reader.readAsDataURL(blob);
-      });
-      onOverlayProcessed(pngDataUrl);
-    } finally {
-      setRemoveBusy(false);
-    }
-  }, [overlayUrl, onOverlayProcessed, removeColorHex, removeTolerance]);
 
   const previewMaxHeightClass = soloFullWidth
     ? "max-h-[min(52vh,320px)] sm:max-h-[min(56vh,420px)] md:max-h-[min(62vh,520px)] lg:max-h-[min(70vh,600px)]"
@@ -1189,44 +1123,6 @@ export function OverlaySlot({
           </button>
         }
         />
-      )}
-      {!exportCaptureMode && decorationType === "embroidery" && overlayUrl && (
-        <div className="mt-2 rounded-md border border-zinc-200 bg-white p-2.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center gap-2 text-[11px] text-zinc-600">
-              Remove color
-              <input
-                type="color"
-                value={removeColorHex}
-                onChange={(e) => setRemoveColorHex(e.target.value)}
-                className="h-7 w-8 cursor-pointer rounded border border-zinc-300 bg-white p-0.5"
-                aria-label="Select background color to remove"
-              />
-            </label>
-            <label className="inline-flex items-center gap-2 text-[11px] text-zinc-600">
-              Tolerance
-              <input
-                type="range"
-                min={8}
-                max={120}
-                step={1}
-                value={removeTolerance}
-                onChange={(e) => setRemoveTolerance(Number.parseInt(e.target.value, 10))}
-                className="w-24"
-                aria-label="Color removal tolerance"
-              />
-              <span className="w-7 text-right text-[10px] text-zinc-500">{removeTolerance}</span>
-            </label>
-            <button
-              type="button"
-              onClick={() => void removeSelectedColorFromOverlay()}
-              disabled={removeBusy}
-              className="ml-auto inline-flex items-center rounded-md border border-zinc-300 px-2.5 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-            >
-              {removeBusy ? "Removing..." : "Remove selected color"}
-            </button>
-          </div>
-        </div>
       )}
       {!exportCaptureMode && (
         <p className="mt-2 text-[10px] sm:text-[11px] text-zinc-500 leading-snug">

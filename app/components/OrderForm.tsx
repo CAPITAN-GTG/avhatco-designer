@@ -878,12 +878,13 @@ export default function OrderForm({
                             Die-cut patch shape
                           </p>
                           <p className="mb-2 px-3 text-[11px] leading-snug text-zinc-500">
-                            Upload the image that defines the cut outline. It appears behind your
-                            artwork on the preview (leatherette color still applies).
+                            Upload the image that defines the cut outline. You’ll confirm which
+                            background color to remove (same step as artwork). It appears behind your
+                            design on the preview; leatherette color still applies.
                           </p>
                           <p className="mb-3 px-3 text-[11px] leading-snug font-medium text-red-400">
-                            Only true white is removed from your uploaded image for leatherette
-                            patches. Gradients or off-white backgrounds will produce poor results.
+                            Solid backgrounds work best. Gradients or busy backgrounds are harder to
+                            clean automatically.
                           </p>
                           <div className="px-3">
                             <DropZone

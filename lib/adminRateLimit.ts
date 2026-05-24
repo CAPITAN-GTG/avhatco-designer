@@ -1,6 +1,3 @@
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
-
 const LOGIN_LIMIT = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
@@ -18,37 +15,6 @@ function getMemoryBuckets(): Map<string, MemoryBucket> {
     globalForRateLimit.adminLoginRateLimit = new Map();
   }
   return globalForRateLimit.adminLoginRateLimit;
-}
-
-function getRedis(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
-    return null;
-  }
-  return new Redis({ url, token });
-}
-
-let loginRateLimiter: Ratelimit | null | undefined;
-
-function getLoginRateLimiter(): Ratelimit | null {
-  if (loginRateLimiter !== undefined) {
-    return loginRateLimiter;
-  }
-
-  const redis = getRedis();
-  if (!redis) {
-    loginRateLimiter = null;
-    return loginRateLimiter;
-  }
-
-  loginRateLimiter = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(LOGIN_LIMIT, "15 m"),
-    prefix: "admin:login:ratelimit",
-    analytics: true,
-  });
-  return loginRateLimiter;
 }
 
 export type LoginRateLimitResult = {
@@ -80,19 +46,5 @@ function checkMemoryLoginRateLimit(key: string): LoginRateLimitResult {
 export async function checkLoginRateLimit(
   key: string
 ): Promise<LoginRateLimitResult> {
-  const limiter = getLoginRateLimiter();
-  if (!limiter) {
-    return checkMemoryLoginRateLimit(key);
-  }
-
-  const result = await limiter.limit(key);
-  if (result.success) {
-    return { success: true };
-  }
-
-  const retryAfterSeconds = Math.max(
-    1,
-    Math.ceil((result.reset - Date.now()) / 1000)
-  );
-  return { success: false, retryAfterSeconds };
+  return checkMemoryLoginRateLimit(key);
 }

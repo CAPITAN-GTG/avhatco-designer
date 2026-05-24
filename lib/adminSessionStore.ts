@@ -1,5 +1,4 @@
-import { randomBytes } from "crypto";
-import { Redis } from "@upstash/redis";
+import { createHmac, timingSafeEqual } from "crypto";
 
 export type AdminSession = {
   username: string;
@@ -9,13 +8,11 @@ export type AdminSession = {
   userAgent?: string;
 };
 
-const SESSION_PREFIX = "admin:session:";
-const LOGIN_LOG_KEY = "admin:login:log";
-const LOGIN_LOG_MAX = 100;
-
-function sessionKey(id: string): string {
-  return `${SESSION_PREFIX}${id}`;
-}
+type SessionPayload = {
+  u: string;
+  iat: number;
+  exp: number;
+};
 
 function getSessionMaxAgeSeconds(): number {
   const fromEnv = Number(process.env.ADMIN_SESSION_MAX_AGE_SECONDS);
@@ -29,38 +26,84 @@ export function getAdminSessionMaxAgeSeconds(): number {
   return getSessionMaxAgeSeconds();
 }
 
-function getRedis(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
+function getSessionSecret(): string | null {
+  const fromEnv =
+    process.env.ADMIN_SESSION_SECRET?.trim() || process.env.ADMIN_SESSION_TOKEN?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+
+  const username = process.env.ADMIN_USERNAME;
+  const password = process.env.ADMIN_PASSWORD;
+  if (username && password) {
+    return `admin-session:${username}:${password}`;
+  }
+
+  return null;
+}
+
+export function isAdminSessionConfigured(): boolean {
+  return getSessionSecret() !== null;
+}
+
+export const ADMIN_SESSION_CONFIG_ERROR =
+  "Admin sessions are not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD (or ADMIN_SESSION_SECRET) in production.";
+
+function signPayload(payload: SessionPayload): string {
+  const secret = getSessionSecret();
+  if (!secret) {
+    throw new Error(ADMIN_SESSION_CONFIG_ERROR);
+  }
+
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = createHmac("sha256", secret).update(body).digest("base64url");
+  return `${body}.${signature}`;
+}
+
+function verifyPayload(token: string): SessionPayload | null {
+  const secret = getSessionSecret();
+  if (!secret) {
     return null;
   }
-  return new Redis({ url, token });
-}
 
-type MemoryStore = Map<string, AdminSession>;
-
-const globalForSessions = globalThis as typeof globalThis & {
-  adminSessionStore?: MemoryStore;
-};
-
-function getMemoryStore(): MemoryStore {
-  if (!globalForSessions.adminSessionStore) {
-    globalForSessions.adminSessionStore = new Map();
+  const separator = token.lastIndexOf(".");
+  if (separator <= 0) {
+    return null;
   }
-  return globalForSessions.adminSessionStore;
-}
 
-function isExpired(session: AdminSession): boolean {
-  return session.expiresAt <= Date.now();
-}
+  const body = token.slice(0, separator);
+  const signature = token.slice(separator + 1);
+  const expected = createHmac("sha256", secret).update(body).digest("base64url");
 
-function pruneExpiredMemorySessions(): void {
-  const store = getMemoryStore();
-  for (const [id, session] of store) {
-    if (isExpired(session)) {
-      store.delete(id);
+  const signatureBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(body, "base64url").toString("utf8")
+    ) as SessionPayload;
+
+    if (
+      typeof payload.u !== "string" ||
+      typeof payload.iat !== "number" ||
+      typeof payload.exp !== "number"
+    ) {
+      return null;
     }
+
+    if (payload.exp <= Date.now()) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
   }
 }
 
@@ -73,85 +116,35 @@ export type CreateAdminSessionInput = {
 export async function createAdminSession(
   input: CreateAdminSessionInput
 ): Promise<string> {
-  const id = randomBytes(32).toString("hex");
   const now = Date.now();
   const maxAgeSeconds = getSessionMaxAgeSeconds();
-  const session: AdminSession = {
-    username: input.username,
-    createdAt: now,
-    expiresAt: now + maxAgeSeconds * 1000,
-    ip: input.ip,
-    userAgent: input.userAgent,
-  };
 
-  const redis = getRedis();
-  if (redis) {
-    await redis.set(sessionKey(id), session, { ex: maxAgeSeconds });
-    await redis.lpush(LOGIN_LOG_KEY, {
-      sessionId: id,
-      username: input.username,
-      ip: input.ip ?? "unknown",
-      userAgent: input.userAgent ?? "unknown",
-      at: now,
-    });
-    await redis.ltrim(LOGIN_LOG_KEY, 0, LOGIN_LOG_MAX - 1);
-    return id;
-  }
-
-  pruneExpiredMemorySessions();
-  getMemoryStore().set(id, session);
-  return id;
+  return signPayload({
+    u: input.username,
+    iat: now,
+    exp: now + maxAgeSeconds * 1000,
+  });
 }
 
 export async function getAdminSession(
-  sessionId: string | undefined
+  sessionToken: string | undefined
 ): Promise<AdminSession | null> {
-  if (!sessionId) {
+  if (!sessionToken) {
     return null;
   }
 
-  const redis = getRedis();
-  if (redis) {
-    const session = await redis.get<AdminSession>(sessionKey(sessionId));
-    if (!session || isExpired(session)) {
-      if (session) {
-        await redis.del(sessionKey(sessionId));
-      }
-      return null;
-    }
-    return session;
-  }
-
-  pruneExpiredMemorySessions();
-  const session = getMemoryStore().get(sessionId);
-  if (!session || isExpired(session)) {
-    getMemoryStore().delete(sessionId);
+  const payload = verifyPayload(sessionToken);
+  if (!payload) {
     return null;
   }
-  return session;
+
+  return {
+    username: payload.u,
+    createdAt: payload.iat,
+    expiresAt: payload.exp,
+  };
 }
 
-export async function revokeAdminSession(sessionId: string | undefined): Promise<void> {
-  if (!sessionId) {
-    return;
-  }
-
-  const redis = getRedis();
-  if (redis) {
-    await redis.del(sessionKey(sessionId));
-    return;
-  }
-
-  getMemoryStore().delete(sessionId);
+export async function revokeAdminSession(_sessionToken: string | undefined): Promise<void> {
+  // Stateless sessions are revoked by clearing the cookie on logout.
 }
-
-export function isUsingPersistentSessionStore(): boolean {
-  return getRedis() !== null;
-}
-
-export function isProductionWithoutSessionStore(): boolean {
-  return process.env.NODE_ENV === "production" && !isUsingPersistentSessionStore();
-}
-
-export const ADMIN_SESSION_STORE_ERROR =
-  "Admin sessions require Upstash Redis in production. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN, then redeploy.";

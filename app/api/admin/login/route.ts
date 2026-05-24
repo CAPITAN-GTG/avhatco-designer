@@ -7,9 +7,9 @@ import {
 import { checkLoginRateLimit } from "@/lib/adminRateLimit";
 import { getClientIp, getUserAgent } from "@/lib/adminRequest";
 import {
-  ADMIN_SESSION_STORE_ERROR,
+  ADMIN_SESSION_CONFIG_ERROR,
   createAdminSession,
-  isProductionWithoutSessionStore,
+  isAdminSessionConfigured,
 } from "@/lib/adminSessionStore";
 
 export async function POST(request: Request) {
@@ -46,28 +46,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  if (isProductionWithoutSessionStore()) {
-    console.error(ADMIN_SESSION_STORE_ERROR);
-    return NextResponse.json({ error: ADMIN_SESSION_STORE_ERROR }, { status: 503 });
+  if (!isAdminSessionConfigured()) {
+    console.error(ADMIN_SESSION_CONFIG_ERROR);
+    return NextResponse.json({ error: ADMIN_SESSION_CONFIG_ERROR }, { status: 503 });
   }
 
-  let sessionId: string;
+  let sessionToken: string;
 
   try {
-    sessionId = await createAdminSession({
+    sessionToken = await createAdminSession({
       username,
       ip,
       userAgent: getUserAgent(request),
     });
   } catch (error) {
     console.error("Failed to create admin session", error);
-    return NextResponse.json(
-      { error: "Could not create session. Check Upstash Redis configuration." },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: ADMIN_SESSION_CONFIG_ERROR }, { status: 503 });
   }
 
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(ADMIN_SESSION_COOKIE, sessionId, adminSessionCookieOptions);
+  response.cookies.set(ADMIN_SESSION_COOKIE, sessionToken, adminSessionCookieOptions);
   return response;
 }

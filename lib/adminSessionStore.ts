@@ -148,3 +148,10 @@ export async function revokeAdminSession(sessionId: string | undefined): Promise
 export function isUsingPersistentSessionStore(): boolean {
   return getRedis() !== null;
 }
+
+export function isProductionWithoutSessionStore(): boolean {
+  return process.env.NODE_ENV === "production" && !isUsingPersistentSessionStore();
+}
+
+export const ADMIN_SESSION_STORE_ERROR =
+  "Admin sessions require Upstash Redis in production. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN, then redeploy.";

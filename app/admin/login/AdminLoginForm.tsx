@@ -1,11 +1,10 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 export default function AdminLoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -20,6 +19,7 @@ export default function AdminLoginForm() {
     try {
       const response = await fetch("/api/admin/login", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
@@ -35,8 +35,9 @@ export default function AdminLoginForm() {
       }
 
       const from = searchParams.get("from");
-      router.push(from?.startsWith("/admin") ? from : "/admin");
-      router.refresh();
+      const destination = from?.startsWith("/admin") ? from : "/admin";
+      window.location.assign(destination);
+      return;
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

@@ -2,7 +2,10 @@
 
 import fs from "fs";
 import path from "path";
+import { STRIPE_ORDER_NUMBER_METADATA_KEY } from "@/lib/adminJobStatus";
+import { generateStripeOrderNumber, stripeOrderNumberFromPaymentIntent } from "@/lib/orderNumber";
 import { assertPaidOrderMatchesPaymentIntent } from "@/lib/stripeVerify";
+import Stripe from "stripe";
 import { sendMail, type EmailAttachment } from "../lib/email";
 
 export type SendOrderEmailsInput = {
@@ -74,7 +77,7 @@ function dieCutShapeAttachmentName(dataUrl: string): string {
 }
 
 async function deliverOrderEmails(
-  input: SendOrderEmailsInput
+  input: SendOrderEmailsInput & { orderNumber?: string }
 ): Promise<{ success: true } | { success: false; error: string }> {
   const email = input.customerEmail?.trim();
   if (!email) return { success: false, error: "Email is required" };
@@ -215,25 +218,6 @@ async function deliverOrderEmails(
       businessAttachments.push(logoAttachment);
     }
 
-    // Plain-text body: ordered sections for client and business (no attachment list in body)
-    const customerTextSections = [
-      `Product: ${input.productTitle}`,
-      orderTimeDallas ? `Order time (Dallas): ${orderTimeDallas}` : "",
-      priceText,
-      decorationText,
-      noteText,
-      "Custom orders typically take 7–14 business days to produce and ship. We’ll follow up by email with proofs and next steps.",
-    ].filter(Boolean);
-    const businessTextSections = [
-      `Customer: ${email}`,
-      trimmedPhone ? `Phone: ${trimmedPhone}` : "",
-      `Product: ${input.productTitle}`,
-      orderTimeDallas ? `Order time (Dallas): ${orderTimeDallas}` : "",
-      priceText,
-      decorationText,
-      noteText,
-    ].filter(Boolean);
-
     const emailStyles = {
       wrap: "max-width:560px;margin:0 auto;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111827;",
       header: "padding:24px 28px;background:#111827;color:#fff;text-align:center;",
@@ -244,6 +228,34 @@ async function deliverOrderEmails(
       value: "font-size:15px;color:#111827;margin:0;",
       footer: "padding:20px 28px;font-size:13px;color:#6b7280;background:#f9fafb;border-top:1px solid #e5e7eb;",
     };
+
+    const orderNumberLine = input.orderNumber?.trim()
+      ? `Order number: ${input.orderNumber.trim()}`
+      : "";
+    const orderNumberHtml = input.orderNumber?.trim()
+      ? `<section style="${emailStyles.section}"><p style="${emailStyles.label}">Order number</p><p style="${emailStyles.value}"><strong>${input.orderNumber.trim()}</strong></p></section>`
+      : "";
+
+    // Plain-text body: ordered sections for client and business (no attachment list in body)
+    const customerTextSections = [
+      orderNumberLine || null,
+      `Product: ${input.productTitle}`,
+      orderTimeDallas ? `Order time (Dallas): ${orderTimeDallas}` : "",
+      priceText,
+      decorationText,
+      noteText,
+      "Custom orders typically take 7–14 business days to produce and ship. We’ll follow up by email with proofs and next steps.",
+    ].filter(Boolean);
+    const businessTextSections = [
+      orderNumberLine || null,
+      `Customer: ${email}`,
+      trimmedPhone ? `Phone: ${trimmedPhone}` : "",
+      `Product: ${input.productTitle}`,
+      orderTimeDallas ? `Order time (Dallas): ${orderTimeDallas}` : "",
+      priceText,
+      decorationText,
+      noteText,
+    ].filter(Boolean);
 
     const decorationInline =
       input.decorationType === "embroidery"
@@ -266,6 +278,7 @@ async function deliverOrderEmails(
     </div>
     <div style="${emailStyles.body}">
       <p style="margin:0 0 20px;font-size:15px;">Thank you for your order.</p>
+      ${orderNumberHtml}
       <section style="${emailStyles.section}">
         <p style="${emailStyles.label}">Product</p>
         <p style="${emailStyles.value}">${input.productTitle}</p>
@@ -297,6 +310,7 @@ async function deliverOrderEmails(
       <p style="margin:8px 0 0;font-size:14px;opacity:0.9;">New order alert</p>
     </div>
     <div style="${emailStyles.body}">
+      ${orderNumberHtml}
       <section style="${emailStyles.section}">
         <p style="${emailStyles.label}">Customer</p>
         <p style="${emailStyles.value}">${email}</p>
@@ -342,6 +356,30 @@ async function deliverOrderEmails(
   }
 }
 
+async function resolveStripeOrderNumber(paymentIntentId: string): Promise<string | undefined> {
+  const secret = process.env.STRIPE_SECRET_KEY;
+  if (!secret) {
+    return undefined;
+  }
+
+  const stripe = new Stripe(secret);
+  let pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+  let orderNumber = stripeOrderNumberFromPaymentIntent(pi);
+
+  if (!pi.metadata?.[STRIPE_ORDER_NUMBER_METADATA_KEY]?.trim()) {
+    orderNumber = generateStripeOrderNumber(new Date(pi.created * 1000));
+    pi = await stripe.paymentIntents.update(paymentIntentId, {
+      metadata: {
+        ...pi.metadata,
+        [STRIPE_ORDER_NUMBER_METADATA_KEY]: orderNumber,
+      },
+    });
+    orderNumber = stripeOrderNumberFromPaymentIntent(pi);
+  }
+
+  return orderNumber;
+}
+
 export async function sendOrderEmailsAfterPayment(
   input: SendOrderEmailsInput & { paymentIntentId: string; currencyCode: string }
 ): Promise<{ success: true } | { success: false; error: string }> {
@@ -354,9 +392,12 @@ export async function sendOrderEmailsAfterPayment(
   if (!verified.ok) {
     return { success: false, error: verified.error };
   }
+
+  const orderNumber = await resolveStripeOrderNumber(input.paymentIntentId);
   const { paymentIntentId: _pid, currencyCode: _cc, ...emailInput } = input;
   return deliverOrderEmails({
     ...emailInput,
     paymentIntentCreatedUnix: verified.paymentIntentCreatedUnix,
+    orderNumber,
   });
 }

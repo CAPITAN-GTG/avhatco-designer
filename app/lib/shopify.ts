@@ -282,7 +282,7 @@ type AdminCollectionsResponse = {
   errors?: Array<{ message: string }>;
 };
 
-async function adminFetch<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+export async function adminFetch<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const store = process.env.SHOPIFY_STORE?.trim();
   if (!store) {
     throw new Error("Missing env: set SHOPIFY_STORE (e.g. your-store.myshopify.com)");

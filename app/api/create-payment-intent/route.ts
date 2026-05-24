@@ -7,6 +7,8 @@ import {
   parseOrderQuantity,
   toStripeAmount,
 } from "@/lib/pricing";
+import { STRIPE_ORDER_NUMBER_METADATA_KEY } from "@/lib/adminJobStatus";
+import { generateStripeOrderNumber } from "@/lib/orderNumber";
 
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_SECRET_KEY;
@@ -61,6 +63,7 @@ export async function POST(req: Request) {
         quantity: String(qty),
         locations: String(locations),
         decorationType,
+        [STRIPE_ORDER_NUMBER_METADATA_KEY]: generateStripeOrderNumber(),
       },
     });
 

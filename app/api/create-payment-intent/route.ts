@@ -7,8 +7,8 @@ import {
   parseOrderQuantity,
   toStripeAmount,
 } from "@/lib/pricing";
-import { STRIPE_ORDER_NUMBER_METADATA_KEY } from "@/lib/adminJobStatus";
 import { generateStripeOrderNumber } from "@/lib/orderNumber";
+import { buildStripeCustomerMetadata } from "@/lib/stripePaymentMetadata";
 
 export async function POST(req: Request) {
   const secret = process.env.STRIPE_SECRET_KEY;
@@ -24,6 +24,8 @@ export async function POST(req: Request) {
     locations?: unknown;
     currency?: unknown;
     decorationType?: unknown;
+    customerEmail?: unknown;
+    productTitle?: unknown;
   };
   try {
     body = await req.json();
@@ -53,17 +55,27 @@ export async function POST(req: Request) {
   }
 
   const stripe = new Stripe(secret);
+  const orderNumber = generateStripeOrderNumber();
+  const customerEmail =
+    typeof body.customerEmail === "string" ? body.customerEmail.trim() : "";
+  const productTitle =
+    typeof body.productTitle === "string" ? body.productTitle.trim() : "";
 
   try {
     const paymentIntent = await stripe.paymentIntents.create({
       amount,
       currency,
       automatic_payment_methods: { enabled: true },
+      ...(customerEmail ? { receipt_email: customerEmail } : {}),
       metadata: {
         quantity: String(qty),
         locations: String(locations),
         decorationType,
-        [STRIPE_ORDER_NUMBER_METADATA_KEY]: generateStripeOrderNumber(),
+        ...buildStripeCustomerMetadata({
+          customerEmail: customerEmail || undefined,
+          productTitle: productTitle || undefined,
+          orderNumber,
+        }),
       },
     });
 

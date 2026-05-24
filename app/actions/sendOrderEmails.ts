@@ -3,6 +3,10 @@
 import fs from "fs";
 import path from "path";
 import { STRIPE_ORDER_NUMBER_METADATA_KEY } from "@/lib/adminJobStatus";
+import {
+  buildStripeCustomerMetadata,
+  mergeStripePaymentMetadata,
+} from "@/lib/stripePaymentMetadata";
 import { generateStripeOrderNumber, stripeOrderNumberFromPaymentIntent } from "@/lib/orderNumber";
 import { assertPaidOrderMatchesPaymentIntent } from "@/lib/stripeVerify";
 import Stripe from "stripe";
@@ -356,26 +360,31 @@ async function deliverOrderEmails(
   }
 }
 
-async function resolveStripeOrderNumber(paymentIntentId: string): Promise<string | undefined> {
+async function resolveStripeOrderNumber(
+  paymentIntentId: string,
+  customer?: { customerEmail?: string; productTitle?: string }
+): Promise<string | undefined> {
   const secret = process.env.STRIPE_SECRET_KEY;
   if (!secret) {
     return undefined;
   }
 
   const stripe = new Stripe(secret);
-  let pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
   let orderNumber = stripeOrderNumberFromPaymentIntent(pi);
 
   if (!pi.metadata?.[STRIPE_ORDER_NUMBER_METADATA_KEY]?.trim()) {
     orderNumber = generateStripeOrderNumber(new Date(pi.created * 1000));
-    pi = await stripe.paymentIntents.update(paymentIntentId, {
-      metadata: {
-        ...pi.metadata,
-        [STRIPE_ORDER_NUMBER_METADATA_KEY]: orderNumber,
-      },
-    });
-    orderNumber = stripeOrderNumberFromPaymentIntent(pi);
   }
+
+  await mergeStripePaymentMetadata(
+    paymentIntentId,
+    buildStripeCustomerMetadata({
+      customerEmail: customer?.customerEmail,
+      productTitle: customer?.productTitle,
+      orderNumber,
+    })
+  );
 
   return orderNumber;
 }
@@ -393,7 +402,10 @@ export async function sendOrderEmailsAfterPayment(
     return { success: false, error: verified.error };
   }
 
-  const orderNumber = await resolveStripeOrderNumber(input.paymentIntentId);
+  const orderNumber = await resolveStripeOrderNumber(input.paymentIntentId, {
+    customerEmail: input.customerEmail,
+    productTitle: input.productTitle,
+  });
   const { paymentIntentId: _pid, currencyCode: _cc, ...emailInput } = input;
   return deliverOrderEmails({
     ...emailInput,

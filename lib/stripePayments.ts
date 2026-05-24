@@ -5,6 +5,7 @@ import {
   type JobStatus,
 } from "@/lib/adminJobStatus";
 import { stripeOrderNumberFromPaymentIntent } from "@/lib/orderNumber";
+import { customerLabelFromPaymentIntent } from "@/lib/stripePaymentMetadata";
 
 export type AdminPaymentRow = {
   id: string;
@@ -49,26 +50,6 @@ function monthRangeUnix(year: number, month: number): { start: number; end: numb
   return { start, end };
 }
 
-function customerLabel(paymentIntent: Stripe.PaymentIntent): string {
-  if (paymentIntent.receipt_email) {
-    return paymentIntent.receipt_email;
-  }
-
-  const charge = paymentIntent.latest_charge;
-  if (typeof charge === "object" && charge !== null) {
-    const email = charge.billing_details?.email;
-    if (email) {
-      return email;
-    }
-    const name = charge.billing_details?.name;
-    if (name) {
-      return name;
-    }
-  }
-
-  return "Unknown customer";
-}
-
 function mapPaymentIntent(paymentIntent: Stripe.PaymentIntent): AdminPaymentRow {
   const paidAt =
     paymentIntent.status === "succeeded"
@@ -83,7 +64,7 @@ function mapPaymentIntent(paymentIntent: Stripe.PaymentIntent): AdminPaymentRow 
     status: paymentIntent.status,
     createdAt: new Date(paymentIntent.created * 1000),
     paidAt,
-    customerLabel: customerLabel(paymentIntent),
+    customerLabel: customerLabelFromPaymentIntent(paymentIntent),
     jobStatus: parseJobStatus(paymentIntent.metadata?.[STRIPE_JOB_STATUS_METADATA_KEY]),
   };
 }

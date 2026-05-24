@@ -146,6 +146,8 @@ export function StripeCheckoutModal({
             locations,
             currency: currencyCode,
             decorationType,
+            customerEmail: orderPayload.customerEmail,
+            productTitle: orderPayload.productTitle,
           }),
         });
         const data = (await res.json()) as { clientSecret?: string; error?: string };

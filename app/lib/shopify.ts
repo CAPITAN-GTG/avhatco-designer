@@ -1,6 +1,9 @@
 const SHOPIFY_STOREFRONT_API_VERSION = "2024-01";
 const SHOPIFY_ADMIN_API_VERSION = "2025-01";
 
+/** https://avhatco.com/collections/hydro-performance */
+const DESIGNER_COLLECTION_HANDLE = "hydro-performance";
+
 const FETCH_OPTIONS = { cache: "no-store" as RequestCache };
 
 function stripHtml(html: string): string {
@@ -31,32 +34,34 @@ export type ShopifyCollection = {
   description: string;
 };
 
-const PRODUCTS_QUERY = `
-  query GetProducts($first: Int!, $after: String) {
-    products(first: $first, after: $after) {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-      edges {
-        node {
-          id
-          title
-          handle
-          description
-          vendor
-          productType
-          availableForSale
-          priceRange {
-            minVariantPrice { amount currencyCode }
-            maxVariantPrice { amount currencyCode }
-          }
-          featuredImage { url altText }
-          images(first: 3) {
-            edges {
-              node {
-                url
-                altText
+const COLLECTION_PRODUCTS_QUERY = `
+  query GetCollectionProducts($handle: String!, $first: Int!, $after: String) {
+    collection(handle: $handle) {
+      products(first: $first, after: $after) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            id
+            title
+            handle
+            description
+            vendor
+            productType
+            availableForSale
+            priceRange {
+              minVariantPrice { amount currencyCode }
+              maxVariantPrice { amount currencyCode }
+            }
+            featuredImage { url altText }
+            images(first: 3) {
+              edges {
+                node {
+                  url
+                  altText
+                }
               }
             }
           }
@@ -91,14 +96,16 @@ type StorefrontProductNode = Omit<ShopifyProduct, "images"> & {
   };
 };
 
-type ProductsResponse = {
+type StorefrontProductConnection = {
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  edges: Array<{ node: StorefrontProductNode }>;
+};
+
+type CollectionProductsResponse = {
   data?: {
-    products: {
-      pageInfo: { hasNextPage: boolean; endCursor: string | null };
-      edges: Array<{
-        node: StorefrontProductNode;
-      }>;
-    };
+    collection: {
+      products: StorefrontProductConnection;
+    } | null;
   };
   errors?: Array<{ message: string }>;
 };
@@ -182,33 +189,35 @@ async function getAdminAccessToken(): Promise<string> {
   return json.access_token;
 }
 
-const ADMIN_PRODUCTS_QUERY = `
-  query GetProducts($first: Int!, $after: String, $query: String) {
-    products(first: $first, after: $after, query: $query) {
-      pageInfo { hasNextPage endCursor }
-      edges {
-        node {
-          id
-          title
-          handle
-          descriptionHtml
-          vendor
-          productType
-          status
-          featuredImage { url altText }
-          images(first: 10) {
-            edges {
-              node {
-                url
-                altText
+const ADMIN_COLLECTION_PRODUCTS_QUERY = `
+  query GetCollectionProducts($handle: String!, $first: Int!, $after: String) {
+    collectionByHandle(handle: $handle) {
+      products(first: $first, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        edges {
+          node {
+            id
+            title
+            handle
+            descriptionHtml
+            vendor
+            productType
+            status
+            featuredImage { url altText }
+            images(first: 10) {
+              edges {
+                node {
+                  url
+                  altText
+                }
               }
             }
-          }
-          variants(first: 50) {
-            edges {
-              node {
-                price
-                compareAtPrice
+            variants(first: 50) {
+              edges {
+                node {
+                  price
+                  compareAtPrice
+                }
               }
             }
           }
@@ -262,12 +271,16 @@ type AdminCollectionNode = {
   descriptionHtml: string;
 };
 
-type AdminProductsResponse = {
+type AdminProductConnection = {
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+  edges: Array<{ node: AdminProductNode }>;
+};
+
+type AdminCollectionProductsResponse = {
   data?: {
-    products: {
-      pageInfo: { hasNextPage: boolean; endCursor: string | null };
-      edges: Array<{ node: AdminProductNode }>;
-    };
+    collectionByHandle: {
+      products: AdminProductConnection;
+    } | null;
   };
   errors?: Array<{ message: string }>;
 };
@@ -360,18 +373,27 @@ function mapAdminCollectionToCollection(node: AdminCollectionNode): ShopifyColle
   };
 }
 
-async function fetchAllProductsAdmin(): Promise<ShopifyProduct[]> {
+async function fetchCollectionProductsAdmin(handle: string): Promise<ShopifyProduct[]> {
   const all: ShopifyProduct[] = [];
   let after: string | null = null;
   do {
-    const json: AdminProductsResponse = await adminFetch<AdminProductsResponse>(
-      ADMIN_PRODUCTS_QUERY,
-      { first: 50, after, query: "status:ACTIVE" }
-    );
-    const products = json.data?.products;
-    if (!products) throw new Error("Admin API: unexpected products response.");
+    const json: AdminCollectionProductsResponse =
+      await adminFetch<AdminCollectionProductsResponse>(ADMIN_COLLECTION_PRODUCTS_QUERY, {
+        handle,
+        first: 50,
+        after,
+      });
+    const collection = json.data?.collectionByHandle;
+    if (!collection) {
+      throw new Error(
+        `Admin API: collection "${handle}" not found. Check DESIGNER_COLLECTION_HANDLE matches the store URL slug.`
+      );
+    }
+    const products = collection.products;
     for (const edge of products.edges) {
-      all.push(mapAdminProductToProduct(edge.node));
+      if (edge.node.status === "ACTIVE") {
+        all.push(mapAdminProductToProduct(edge.node));
+      }
     }
     after = products.pageInfo.hasNextPage ? products.pageInfo.endCursor : null;
   } while (after);
@@ -449,26 +471,29 @@ function hasAdminAuth(): boolean {
 }
 
 export async function fetchAllShopifyProducts(): Promise<ShopifyProduct[]> {
+  const handle = DESIGNER_COLLECTION_HANDLE;
   if (hasAdminAuth()) {
-    return fetchAllProductsAdmin();
+    return fetchCollectionProductsAdmin(handle);
   }
   const allProducts: ShopifyProduct[] = [];
   let after: string | null = null;
 
   do {
-    const json: ProductsResponse =
-      await storefrontFetch<ProductsResponse>(PRODUCTS_QUERY, {
+    const json: CollectionProductsResponse =
+      await storefrontFetch<CollectionProductsResponse>(COLLECTION_PRODUCTS_QUERY, {
+        handle,
         first: 50,
         after,
       });
 
-    const products = json.data?.products;
-    if (!products) {
+    const collection = json.data?.collection;
+    if (!collection) {
       throw new Error(
-        "Shopify API: unexpected products response. Check token has unauthenticated_read_product_listings scope."
+        `Shopify API: collection "${handle}" not found. Check token has unauthenticated_read_product_listings and read collection scopes.`
       );
     }
 
+    const products = collection.products;
     for (const edge of products.edges) {
       const node = edge.node;
       if (node.availableForSale) {

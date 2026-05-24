@@ -7,6 +7,8 @@ export const SHOPIFY_JOB_STATUS_KEY = "job_status";
 
 export const STRIPE_JOB_STATUS_METADATA_KEY = "job_status";
 export const STRIPE_ORDER_NUMBER_METADATA_KEY = "order_number";
+export const STRIPE_CUSTOMER_EMAIL_METADATA_KEY = "customer_email";
+export const STRIPE_PRODUCT_TITLE_METADATA_KEY = "product_title";
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   todo: "To do",

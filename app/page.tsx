@@ -39,7 +39,7 @@ export default async function Home() {
 
         {!error && products.length === 0 ? (
           <div className="mb-6 mx-4 sm:mx-0 rounded-xl border border-[#e5e7eb] bg-white px-4 py-3 text-sm text-[#4b5563]">
-            No products found. The store may be empty or token may lack scope.
+            No Hydro Performance products found. Check the collection or token scopes.
           </div>
         ) : null}
 
